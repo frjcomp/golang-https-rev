@@ -1,6 +1,6 @@
-# Binaries
-listener
-reverse
+# Compiled binaries only (not source code)
+/listener
+/reverse
 
 # Go build artifacts
 *.exe

@@ -1,3 +1,3 @@
-module github.com/frjcomp/golang-https-rev
+module golang-https-rev
 
 go 1.25.4
