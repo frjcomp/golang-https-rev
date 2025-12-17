@@ -2,6 +2,8 @@
 
 Minimal, encrypted reverse shell over raw TCP with TLS (no HTTP).
 
+Use this when you need a self-hosted, encrypted reverse shell alternative—for example, when tools like sshx cannot be used due to customer concerns about data residency or third-party hosting requirements.
+
 ## Install
 - Binstaller (recommended):
   - Listener: `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-listener.sh | sh`
