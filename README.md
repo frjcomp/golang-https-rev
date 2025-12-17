@@ -1,12 +1,12 @@
-# Golang TLS Reverse Shell (TCP)
-
 <div align="center">
   <img src="pipeleek_gots.svg" alt="pipeleek_gots" width="200" />
 </div>
 
+# GOTS - Golang TLS (Reverse) Shell - For Pipeleek
+
 Minimal, encrypted reverse shell over raw TCP with TLS.
 
-Use this when you need a self-hosted, encrypted reverse shell alternative—for example, when tools like sshx cannot be used due to customer concerns about data residency or third-party hosting requirements.
+Use this when you need a self-hosted, encrypted reverse shell alternative—for example, when tools like [sshx](https://sshx.io/) cannot be used due to customer concerns about data residency or third-party hosting requirements.
 
 ## Install
 - Binstaller (recommended):
