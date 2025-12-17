@@ -229,7 +229,14 @@ func interactiveShell(l *server.Listener) {
 					if err == nil {
 						resp = strings.ReplaceAll(resp, "<<<END_OF_OUTPUT>>>", "")
 						files := parseFileList(resp, prefix, osType)
-						return files
+						// Return only the suffix after the prefix (what liner will append)
+						var suffixes []string
+						for _, f := range files {
+							if strings.HasPrefix(f, prefix) {
+								suffixes = append(suffixes, f[len(prefix):])
+							}
+						}
+						return suffixes
 					}
 				}
 				return []string{}
@@ -253,7 +260,12 @@ func interactiveShell(l *server.Listener) {
 					completions = append(completions, match)
 				}
 			}
-			return completions
+			// Return only the suffix after the prefix (what liner will append)
+			var suffixes []string
+			for _, c := range completions {
+				suffixes = append(suffixes, c[len(prefix):])
+			}
+			return suffixes
 		}
 
 		return []string{}
