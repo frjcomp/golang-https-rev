@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"golang-https-rev/pkg/certs"
+	"golang-https-rev/pkg/version"
 	"golang-https-rev/pkg/server"
 )
 
@@ -28,6 +29,8 @@ func main() {
 		log.Fatalf("Failed to generate certificate: %v", err)
 	}
 	log.Println("Certificate generated successfully")
+
+	log.Printf("Version: %s (commit %s, date %s)", version.Version, version.Commit, version.Date)
 
 	// Create TLS config
 	tlsConfig := &tls.Config{

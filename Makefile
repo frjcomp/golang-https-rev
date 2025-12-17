@@ -11,6 +11,15 @@ BIN_DIR := bin
 BIN_LISTENER := $(BIN_DIR)/listener
 BIN_REVERSE  := $(BIN_DIR)/reverse
 
+# Version metadata
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE    := $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+LDFLAGS := -s -w \
+	-X golang-https-rev/pkg/version.Version=$(VERSION) \
+	-X golang-https-rev/pkg/version.Commit=$(COMMIT) \
+	-X golang-https-rev/pkg/version.Date=$(DATE)
+
 .PHONY: all help build test fmt vet clean run-listener run-reverse cover mod
 
 all: build
@@ -31,8 +40,8 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 build: $(BIN_DIR)
-	$(GO) build -o $(BIN_LISTENER) ./cmd/listener
-	$(GO) build -o $(BIN_REVERSE) ./cmd/reverse
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_LISTENER) ./cmd/listener
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_REVERSE) ./cmd/reverse
 
 test:
 	$(GO) test ./... -v

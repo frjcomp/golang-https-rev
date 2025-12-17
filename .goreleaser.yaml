@@ -23,6 +23,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      - -X golang-https-rev/pkg/version.Version={{ .Version }}
+      - -X golang-https-rev/pkg/version.Commit={{ .Commit }}
+      - -X golang-https-rev/pkg/version.Date={{ .Date }}
   - id: reverse
     main: ./cmd/reverse
     binary: reverse
@@ -37,6 +40,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      - -X golang-https-rev/pkg/version.Version={{ .Version }}
+      - -X golang-https-rev/pkg/version.Commit={{ .Commit }}
+      - -X golang-https-rev/pkg/version.Date={{ .Date }}
 
 archives:
   - id: listener-archive

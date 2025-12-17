@@ -60,15 +60,23 @@ jobs:
       - name: Install binstaller CLI
         run: go install github.com/binary-install/binstaller/cmd/binst@v0.1.0
 
-      - name: Generate binstaller script
+      - name: Generate binstaller scripts (listener and reverse)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.ref_name }}
         run: |
           binst init --source=goreleaser --file=.goreleaser.yaml --repo frjcomp/golang-https-rev --name golang-https-rev -o .config/binstaller.yml
+
+          # Listener installer
           binst embed-checksums --config .config/binstaller.yml --version "$VERSION" --mode download
           mkdir -p public
-          binst gen --config .config/binstaller.yml --target-version "$VERSION" -o public/install.sh
+          binst gen --config .config/binstaller.yml --target-version "$VERSION" -o public/install-listener.sh
+
+          # Reverse installer
+          cp .config/binstaller.yml .config/binstaller-reverse.yml
+          sed -i 's/${NAME}_listener_/${NAME}_reverse_/g' .config/binstaller-reverse.yml
+          binst embed-checksums --config .config/binstaller-reverse.yml --version "$VERSION" --mode download
+          binst gen --config .config/binstaller-reverse.yml --target-version "$VERSION" -o public/install-reverse.sh
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

