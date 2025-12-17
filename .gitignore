@@ -1,4 +1,10 @@
-# Compiled binaries only (not source code)
+# Build outputs
+/bin/
+
+# GoReleaser output
+/dist/
+
+# Compiled binaries (root; legacy)
 /listener
 /reverse
 

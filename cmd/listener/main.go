@@ -52,7 +52,7 @@ func interactiveShell(l *server.Listener) {
 
 	fmt.Println("\n=== Reverse Shell Listener ===")
 	fmt.Println("Commands:")
-	fmt.Println("  list                 - List connected clients")
+	fmt.Println("  ls                   - List connected clients")
 	fmt.Println("  use <client_id>      - Interact with a specific client")
 	fmt.Println("  exit                 - Exit the listener")
 	fmt.Println()
@@ -81,7 +81,7 @@ func interactiveShell(l *server.Listener) {
 
 		if currentClient == "" {
 			switch command {
-			case "list":
+			case "ls":
 				clients := l.GetClients()
 				if len(clients) == 0 {
 					fmt.Println("No clients connected")

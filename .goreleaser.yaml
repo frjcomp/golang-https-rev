@@ -1,0 +1,64 @@
+version: 2
+
+dist: dist
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: listener
+    main: ./cmd/listener
+    binary: listener
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+  - id: reverse
+    main: ./cmd/reverse
+    binary: reverse
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: listener-archive
+    builds:
+      - listener
+    name_template: "{{ .ProjectName }}_listener_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: reverse-archive
+    builds:
+      - reverse
+    name_template: "{{ .ProjectName }}_reverse_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ .ShortCommit }}"
+
+changelog:
+  disable: true
