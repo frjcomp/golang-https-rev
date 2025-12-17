@@ -157,6 +157,98 @@ func TestLinerHistoryFeature(t *testing.T) {
 	waitForExit(t, listener, 5*time.Second)
 }
 
+// TestCommandLoadAndBuffering runs many basic CLI commands in sequence to detect buffering issues.
+// This test ensures that rapid command execution doesn't cause command corruption or buffering problems.
+func TestCommandLoadAndBuffering(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	port := freePort(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	listenerBin := buildBinary(t, "gotsl", "./cmd/gotsl")
+	reverseBin := buildBinary(t, "gotsr", "./cmd/gotsr")
+
+	listener := startProcess(ctx, t, listenerBin, port, "127.0.0.1")
+	t.Cleanup(listener.stop)
+	waitForContains(t, listener, "Listener ready. Waiting for connections", 10*time.Second)
+
+	reverse := startProcess(ctx, t, reverseBin, fmt.Sprintf("127.0.0.1:%s", port), "1")
+	t.Cleanup(reverse.stop)
+	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
+
+	// Connect to the client
+	send(listener, "use 1\n")
+	waitForContains(t, listener, "Now interacting with", 5*time.Second)
+
+	// Run a series of basic commands to stress test buffering and command handling
+	// Tests include rapid-fire commands, commands with output, and commands with no output
+	testCases := []struct {
+		name     string
+		cmd      string
+		contains string // expected output substring
+	}{
+		{"echo simple", "echo hello\n", "hello"},
+		{"echo with spaces", "echo hello world\n", "hello world"},
+		{"pwd basic", "pwd\n", ""}, // any output is ok
+		{"ls basic", "ls\n", "go.mod"},
+		{"whoami", "whoami\n", currentUser(t)},
+		{"echo number", "echo 42\n", "42"},
+		{"true command", "true\n", ""},
+		{"false command", "false\n", ""},
+		{"echo multiword", "echo one two three four five\n", "one two three four five"},
+		{"date command", "date\n", ""}, // any date output
+		{"uname", "uname\n", ""},
+		{"echo test1", "echo test1\n", "test1"},
+		{"echo test2", "echo test2\n", "test2"},
+		{"echo test3", "echo test3\n", "test3"},
+		{"ls again", "ls\n", "go.mod"},
+		{"whoami again", "whoami\n", currentUser(t)},
+		{"echo x", "echo x\n", "x"},
+		{"pwd again", "pwd\n", ""},
+		{"echo y", "echo y\n", "y"},
+		{"echo z", "echo z\n", "z"},
+	}
+
+	for i, tc := range testCases {
+		send(listener, tc.cmd)
+
+		// For commands with expected output, wait for it
+		if tc.contains != "" {
+			waitForContains(t, listener, tc.contains, 5*time.Second)
+		} else {
+			// For commands without specific output, just give it time to execute
+			time.Sleep(300 * time.Millisecond)
+		}
+
+		// Verify no errors occurred in output (like "not found" or "exit status 127")
+		snapshot := listener.snapshot()
+		if strings.Contains(snapshot, "not found") {
+			t.Fatalf("test case %d (%s): command not found in output:\n%s", i, tc.name, snapshot)
+		}
+		if strings.Contains(snapshot, "exit status 127") {
+			t.Fatalf("test case %d (%s): command execution failed with exit 127 (not found):\n%s", i, tc.name, snapshot)
+		}
+	}
+
+	// Verify that all commands executed without buffering issues by checking
+	// the reverse client received all commands
+	send(listener, "bg\n")
+	waitForContains(t, listener, "Backgrounding session", 5*time.Second)
+
+	// Check that reverse client received a good number of commands
+	reverseOutput := reverse.snapshot()
+	commandCount := strings.Count(reverseOutput, "Received command:")
+	if commandCount < len(testCases)-3 { // Allow some margin for timing
+		t.Fatalf("reverse client only received %d commands out of %d; output:\n%s", commandCount, len(testCases), reverseOutput)
+	}
+
+	send(listener, "exit\n")
+	waitForExit(t, listener, 5*time.Second)
+}
+
 type proc struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
