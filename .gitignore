@@ -1,0 +1,27 @@
+# Binaries
+listener
+reverse
+
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+/vendor/
+go.sum

