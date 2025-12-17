@@ -1,6 +1,8 @@
 # Golang TLS Reverse Shell (TCP)
 
-Minimal, encrypted reverse shell over raw TCP with TLS (no HTTP).
+![pipeleek_gots](pipeleek_gots.svg)
+
+Minimal, encrypted reverse shell over raw TCP with TLS.
 
 Use this when you need a self-hosted, encrypted reverse shell alternative—for example, when tools like sshx cannot be used due to customer concerns about data residency or third-party hosting requirements.
 
