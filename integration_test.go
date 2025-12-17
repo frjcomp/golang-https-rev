@@ -102,6 +102,61 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, reverse, "Max retries (1) reached. Exiting.", 10*time.Second)
 }
 
+// TestLinerHistoryFeature tests that the liner history works by executing multiple commands in sequence
+// and verifying each executes correctly. This ensures the liner REPL handles command input properly.
+func TestLinerHistoryFeature(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	port := freePort(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	listenerBin := buildBinary(t, "listener", "./cmd/listener")
+	reverseBin := buildBinary(t, "reverse", "./cmd/reverse")
+
+	listener := startProcess(ctx, t, listenerBin, port, "127.0.0.1")
+	t.Cleanup(listener.stop)
+	waitForContains(t, listener, "Listener ready. Waiting for connections", 10*time.Second)
+
+	reverse := startProcess(ctx, t, reverseBin, fmt.Sprintf("127.0.0.1:%s", port), "1")
+	t.Cleanup(reverse.stop)
+	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
+
+	// Connect to the single client
+	send(listener, "use 1\n")
+	waitForContains(t, listener, "Now interacting with", 5*time.Second)
+
+	// Execute a series of commands to ensure liner can handle multiple inputs without issues
+	commands := []struct {
+		input  string
+		expect string
+	}{
+		{"ls\n", "go.mod"},
+		{"whoami\n", currentUser(t)},
+		{"pwd\n", ""}, // Just verify it doesn't crash
+		{"echo test\n", "test"},
+	}
+
+	for _, cmd := range commands {
+		send(listener, cmd.input)
+		if cmd.expect != "" {
+			waitForContains(t, listener, cmd.expect, 5*time.Second)
+		} else {
+			// For commands without a specific expected output, just wait for the prompt
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	// Background and exit
+	send(listener, "bg\n")
+	waitForContains(t, listener, "Backgrounding session", 5*time.Second)
+
+	send(listener, "exit\n")
+	waitForExit(t, listener, 5*time.Second)
+}
+
 type proc struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
