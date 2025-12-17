@@ -9,9 +9,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: listener
-    main: ./cmd/listener
-    binary: listener
+  - id: gotsl
+    main: ./cmd/gotsl
+    binary: gotsl
     env:
       - CGO_ENABLED=0
     goos:
@@ -26,9 +26,9 @@ builds:
       - -X golang-https-rev/pkg/version.Version={{ .Version }}
       - -X golang-https-rev/pkg/version.Commit={{ .Commit }}
       - -X golang-https-rev/pkg/version.Date={{ .Date }}
-  - id: reverse
-    main: ./cmd/reverse
-    binary: reverse
+  - id: gotsr
+    main: ./cmd/gotsr
+    binary: gotsr
     env:
       - CGO_ENABLED=0
     goos:
@@ -45,18 +45,18 @@ builds:
       - -X golang-https-rev/pkg/version.Date={{ .Date }}
 
 archives:
-  - id: listener-archive
+  - id: gotsl-archive
     ids:
-      - listener
-    name_template: "{{ .ProjectName }}_listener_{{ .Os }}_{{ .Arch }}"
+      - gotsl
+    name_template: "{{ .ProjectName }}_gotsl_{{ .Os }}_{{ .Arch }}"
     formats: tar.gz
     format_overrides:
       - goos: windows
         formats: zip
-  - id: reverse-archive
+  - id: gotsr-archive
     ids:
-      - reverse
-    name_template: "{{ .ProjectName }}_reverse_{{ .Os }}_{{ .Arch }}"
+      - gotsr
+    name_template: "{{ .ProjectName }}_gotsr_{{ .Os }}_{{ .Arch }}"
     formats: tar.gz
     format_overrides:
       - goos: windows
