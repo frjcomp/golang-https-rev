@@ -101,8 +101,7 @@ func interactiveShell(l *server.Listener) {
 
 	var currentClient string
 
-	fmt.Println("\n=== GOTS - PIPELEEK ===")
-	fmt.Println("Commands:")
+	fmt.Println("\nCommands:")
 	fmt.Println("  ls                   - List connected clients")
 	fmt.Println("  use <client_id>      - Interact with a specific client")
 	fmt.Println("  upload <l> <r>       - Upload local file <l> to remote path <r> (active session)")
