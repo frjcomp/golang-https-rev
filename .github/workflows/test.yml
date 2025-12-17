@@ -13,14 +13,14 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
             name: Linux
           - os: macos-latest
             name: macOS (ARM64)
-          - os: macos-15
-            name: macOS (Intel)
+          - os: windows-latest
+            name: Windows
     runs-on: ${{ matrix.os }}
     name: Test on ${{ matrix.name }}
     
