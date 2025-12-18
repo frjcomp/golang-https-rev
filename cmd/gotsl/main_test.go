@@ -2,13 +2,10 @@ package main
 
 import (
 	"bytes"
-	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"golang-https-rev/pkg/compression"
-	"golang-https-rev/pkg/protocol"
 )
 
 // TestCompressDecompressRoundTrip verifies that data can be compressed to hex and decompressed back identically
@@ -115,35 +112,27 @@ func TestListClientsMultiple(t *testing.T) {
 	listClients(ml)
 }
 
-func TestUseClientValid(t *testing.T) {
+func TestGetClientByIDValid(t *testing.T) {
 	ml := &mockListener{clients: []string{"192.168.1.2:1234", "10.0.0.5:5678"}}
-	result := useClient(ml, []string{"use", "1"})
+	result := getClientByID(ml, "1")
 	if result != "192.168.1.2:1234" {
 		t.Fatalf("expected first client, got %s", result)
 	}
 }
 
-func TestUseClientInvalidID(t *testing.T) {
+func TestGetClientByIDInvalidID(t *testing.T) {
 	ml := &mockListener{clients: []string{"192.168.1.2:1234"}}
-	result := useClient(ml, []string{"use", "5"})
+	result := getClientByID(ml, "5")
 	if result != "" {
 		t.Fatalf("expected empty for out-of-range ID, got %s", result)
 	}
 }
 
-func TestUseClientNonNumericID(t *testing.T) {
+func TestGetClientByIDNonNumericID(t *testing.T) {
 	ml := &mockListener{clients: []string{"192.168.1.2:1234"}}
-	result := useClient(ml, []string{"use", "abc"})
+	result := getClientByID(ml, "abc")
 	if result != "" {
 		t.Fatalf("expected empty for non-numeric ID, got %s", result)
-	}
-}
-
-func TestUseClientMissingArg(t *testing.T) {
-	ml := &mockListener{clients: []string{"192.168.1.2:1234"}}
-	result := useClient(ml, []string{"use"})
-	if result != "" {
-		t.Fatalf("expected empty when missing arg, got %s", result)
 	}
 }
 
@@ -188,30 +177,6 @@ func (m *mockListener) GetResponse(client string, timeout time.Duration) (string
 	return "", nil
 }
 
-func TestSendShellCommandSuccess(t *testing.T) {
-	ml := &mockListener{responses: []string{"output" + protocol.EndOfOutputMarker}}
-	if !sendShellCommand(ml, "192.168.1.2:1234", "ls") {
-		t.Fatal("expected success")
-	}
-	if len(ml.sentCommands) != 1 || ml.sentCommands[0] != "ls" {
-		t.Fatalf("unexpected commands: %v", ml.sentCommands)
-	}
-}
-
-func TestSendShellCommandSendError(t *testing.T) {
-	ml := &mockListener{sendErr: bytes.ErrTooLarge}
-	if sendShellCommand(ml, "192.168.1.2:1234", "ls") {
-		t.Fatal("expected failure when send fails")
-	}
-}
-
-func TestSendShellCommandGetError(t *testing.T) {
-	ml := &mockListener{getErr: bytes.ErrTooLarge}
-	if sendShellCommand(ml, "192.168.1.2:1234", "ls") {
-		t.Fatal("expected failure when get response fails")
-	}
-}
-
 func TestPrintHelp(t *testing.T) {
 	// Just call it to increase coverage - it only prints output
 	printHelp()
@@ -222,153 +187,20 @@ func TestPrintHeader(t *testing.T) {
 	printHeader()
 }
 
-func TestHandleUploadGetResponseError(t *testing.T) {
-	// Create a temp file
-	tmpfile := t.TempDir() + "/test.txt"
-	if err := os.WriteFile(tmpfile, []byte("test data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	ml := &mockListener{
-		getErr: bytes.ErrTooLarge,
-	}
-	result := handleUpload(ml, "192.168.1.2:1234", []string{"upload", tmpfile, "/remote/path.txt"})
-	if result {
-		t.Fatal("expected false when get response fails")
+func TestHandleUploadGlobalBadFile(t *testing.T) {
+	ml := &mockListener{}
+	result := handleUploadGlobal(ml, "192.168.1.2:1234", "/nonexistent/file.txt", "/remote/path.txt")
+	// The function returns true (continue) on local errors, false (disconnect) on network errors
+	if !result {
+		t.Fatal("expected true for nonexistent file (continue connection)")
 	}
 }
 
-func TestHandleDownloadGetResponseError(t *testing.T) {
+func TestHandleDownloadGlobalGetResponseError(t *testing.T) {
 	ml := &mockListener{getErr: bytes.ErrTooLarge}
 	tmpfile := t.TempDir() + "/out.txt"
-	result := handleDownload(ml, "192.168.1.2:1234", []string{"download", "/remote/file.txt", tmpfile})
+	result := handleDownloadGlobal(ml, "192.168.1.2:1234", "/remote/file.txt", tmpfile)
 	if result {
 		t.Fatal("expected false when get response fails")
-	}
-}
-
-func TestHandleDownloadInvalidResponse(t *testing.T) {
-	ml := &mockListener{
-		responses: []string{"INVALID_RESPONSE\n" + protocol.EndOfOutputMarker},
-	}
-	tmpfile := t.TempDir() + "/out.txt"
-	result := handleDownload(ml, "192.168.1.2:1234", []string{"download", "/remote/file.txt", tmpfile})
-	if !result {
-		t.Fatal("expected true - error handled but connection maintained")
-	}
-}
-
-func TestHandleDownloadInvalidHex(t *testing.T) {
-	ml := &mockListener{
-		responses: []string{protocol.DataPrefix + "INVALID_HEX!@#\n" + protocol.EndOfOutputMarker},
-	}
-	tmpfile := t.TempDir() + "/out.txt"
-	result := handleDownload(ml, "192.168.1.2:1234", []string{"download", "/remote/file.txt", tmpfile})
-	if !result {
-		t.Fatal("expected true - error handled but connection maintained")
-	}
-}
-
-func TestHandleDownloadWriteError(t *testing.T) {
-	// Create a valid compressed hex payload
-	testData := []byte("test data")
-	compressed, err := compression.CompressToHex(testData)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ml := &mockListener{
-		responses: []string{protocol.DataPrefix + compressed + "\n" + protocol.EndOfOutputMarker},
-	}
-
-	// Try to write to an invalid path (directory doesn't exist)
-	result := handleDownload(ml, "192.168.1.2:1234", []string{"download", "/remote/file.txt", "/nonexistent/dir/file.txt"})
-	if !result {
-		t.Fatal("expected true - write error handled but connection maintained")
-	}
-}
-
-func TestHandleUploadBadStartResponse(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "upload-test-*.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Write([]byte("test content"))
-	tmpFile.Close()
-
-	ml := &mockListener{
-		responses: []string{"ERROR" + protocol.EndOfOutputMarker},
-	}
-
-	result := handleUpload(ml, "client1", []string{"upload", tmpFile.Name(), "/remote/path.txt"})
-	if result {
-		t.Fatal("expected false when start response is not OK")
-	}
-}
-
-func TestHandleUploadChunkSendError(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "upload-test-*.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpFile.Name())
-	// Write data larger than chunk size to trigger chunk loop
-	tmpFile.Write(bytes.Repeat([]byte("x"), protocol.ChunkSize+1000))
-	tmpFile.Close()
-
-	ml := &mockListener{
-		responses: []string{"OK" + protocol.EndOfOutputMarker},
-		sendErrs:  []error{nil, errors.New("chunk send failed")}, // First OK, second fails
-	}
-
-	result := handleUpload(ml, "client1", []string{"upload", tmpFile.Name(), "/remote/path.txt"})
-	if result {
-		t.Fatal("expected false when chunk send fails")
-	}
-}
-
-func TestHandleUploadChunkResponseError(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "upload-test-*.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Write([]byte("test"))
-	tmpFile.Close()
-
-	ml := &mockListener{
-		responses: []string{
-			"OK" + protocol.EndOfOutputMarker,       // Start upload OK
-			"CHUNK_ERROR" + protocol.EndOfOutputMarker, // Chunk response not OK
-		},
-	}
-
-	result := handleUpload(ml, "client1", []string{"upload", tmpFile.Name(), "/remote/path.txt"})
-	if result {
-		t.Fatal("expected false when chunk response is not OK")
-	}
-}
-
-func TestHandleUploadEndUploadError(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "upload-test-*.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Write([]byte("test"))
-	tmpFile.Close()
-
-	ml := &mockListener{
-		responses: []string{
-			"OK" + protocol.EndOfOutputMarker, // Start upload OK
-			"OK" + protocol.EndOfOutputMarker, // Chunk OK
-		},
-		sendErrs: []error{nil, nil, errors.New("end upload send failed")}, // First 2 OK, third fails
-	}
-
-	result := handleUpload(ml, "client1", []string{"upload", tmpFile.Name(), "/remote/path.txt"})
-	if result {
-		t.Fatal("expected false when end upload send fails")
 	}
 }

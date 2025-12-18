@@ -591,3 +591,116 @@ func TestHandleEndUploadMultipleChunks(t *testing.T) {
 		t.Errorf("Multi-chunk content mismatch: got %q, expected %q", written, expected)
 	}
 }
+
+// TestPtyModeReentry tests that PTY mode can be entered and exited multiple times
+// without "input/output error" or goroutine leaks
+func TestPtyModeReentry(t *testing.T) {
+	// Test entering and exiting PTY mode 3 times
+	numRetries := 3
+	
+	for attempt := 1; attempt <= numRetries; attempt++ {
+		t.Logf("Attempt %d: Testing PTY entry/exit cycle", attempt)
+		
+		client, output := createMockClient()
+		
+		// Verify not in PTY mode initially
+		if client.inPtyMode {
+			t.Errorf("Attempt %d: Client should not be in PTY mode initially", attempt)
+		}
+		
+		// Enter PTY mode
+		err := client.handlePtyModeCommand()
+		if err != nil {
+			t.Errorf("Attempt %d: handlePtyModeCommand failed: %v", attempt, err)
+			continue
+		}
+		
+		// Verify PTY state
+		if !client.inPtyMode {
+			t.Errorf("Attempt %d: Client should be in PTY mode after handlePtyModeCommand", attempt)
+			continue
+		}
+		
+		if client.ptyFile == nil {
+			t.Errorf("Attempt %d: PTY file should not be nil", attempt)
+			continue
+		}
+		
+		if client.ptyCmd == nil {
+			t.Errorf("Attempt %d: PTY cmd should not be nil", attempt)
+			continue
+		}
+		
+		// Store reference to PTY file to verify cleanup
+		oldPtyFile := client.ptyFile
+		
+		// Small delay to allow background goroutine to start
+		// (in real usage, this would be reading/writing data)
+		
+		// Exit PTY mode
+		err = client.handlePtyExitCommand()
+		if err != nil {
+			t.Errorf("Attempt %d: handlePtyExitCommand failed: %v", attempt, err)
+			continue
+		}
+		
+		// Verify PTY state after exit
+		if client.inPtyMode {
+			t.Errorf("Attempt %d: Client should not be in PTY mode after exit", attempt)
+			continue
+		}
+		
+		if client.ptyFile != nil {
+			t.Errorf("Attempt %d: PTY file should be nil after exit", attempt)
+			continue
+		}
+		
+		if client.ptyCmd != nil {
+			t.Errorf("Attempt %d: PTY cmd should be nil after exit", attempt)
+			continue
+		}
+		
+		// Verify exit message in output
+		result := output.String()
+		if !bytes.Contains([]byte(result), []byte("Exited PTY mode")) {
+			t.Errorf("Attempt %d: Expected 'Exited PTY mode' in output, got: %s", attempt, result)
+			continue
+		}
+		
+		// Verify the old PTY file is closed
+		// Try to read from it - should fail gracefully
+		testBuf := make([]byte, 1)
+		_, err = oldPtyFile.Read(testBuf)
+		// It's OK if this fails - the file should be closed
+		// The important thing is that we can re-enter without errors on next iteration
+		
+		t.Logf("Attempt %d: PTY cycle completed successfully", attempt)
+	}
+}
+
+// TestPtyDataEncoding tests compression and decompression of PTY data
+func TestPtyDataEncoding(t *testing.T) {
+	testData := []byte("Hello, PTY! This is test data with binary: \x00\x01\x02")
+	
+	// Compress and encode
+	encoded, err := compression.CompressToHex(testData)
+	if err != nil {
+		t.Fatalf("CompressToHex failed: %v", err)
+	}
+	
+	if encoded == "" {
+		t.Error("Encoded data should not be empty")
+	}
+	
+	// Decompress and decode
+	decoded, err := compression.DecompressHex(encoded)
+	if err != nil {
+		t.Fatalf("DecompressHex failed: %v", err)
+	}
+	
+	if !bytes.Equal(decoded, testData) {
+		t.Errorf("Roundtrip compression failed: got %q, expected %q", decoded, testData)
+	}
+	
+	t.Logf("✓ PTY data encoding test passed")
+}

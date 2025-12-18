@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"golang-https-rev/pkg/certs"
+	"golang-https-rev/pkg/protocol"
 )
 
 // createTestListenerHelper creates a listener with a dynamic port (OS selects available port)
@@ -25,7 +26,7 @@ func createTestListenerHelper(t *testing.T) *Listener {
 // TestGetClientAddressesSorted tests the sorted client addresses function
 func TestGetClientAddressesSorted(t *testing.T) {
 	listener := createTestListenerHelper(t)
-	
+
 	// Initially empty
 	clients := listener.GetClientAddressesSorted()
 	if len(clients) != 0 {
@@ -113,7 +114,7 @@ func TestListenerStartInvalidPort(t *testing.T) {
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 	}
-	
+
 	// Invalid port
 	listener := NewListener("99999", "127.0.0.1", tlsConfig)
 	_, err = listener.Start()
@@ -155,8 +156,6 @@ func TestGetResponseNoData(t *testing.T) {
 
 	t.Log("✓ Get response timeout test passed")
 }
-
-
 
 // TestGetClientAddressesSortedWithClients tests sorting with actual clients
 func TestGetClientAddressesSortedWithClients(t *testing.T) {
@@ -294,4 +293,43 @@ func TestListenerStartError(t *testing.T) {
 	}
 
 	t.Log("✓ Listener start error test passed")
+}
+
+// TestGetResponseSkipsKeepalive ensures PING/PONG responses are ignored when waiting for command output
+func TestGetResponseSkipsKeepalive(t *testing.T) {
+	listener := createTestListenerHelper(t)
+
+	clientID := "client-1"
+	respChan := make(chan string, 2)
+	pauseChan := make(chan bool, 1)
+
+	listener.clientResponses[clientID] = respChan
+	listener.clientPausePing[clientID] = pauseChan
+
+	// Simulate client sending a keepalive PONG (with marker) followed by real output
+	respChan <- protocol.CmdPong + "\n" + protocol.EndOfOutputMarker + "\n"
+	respChan <- "ls output\n" + protocol.EndOfOutputMarker + "\n"
+
+	resp, err := listener.GetResponse(clientID, 500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("unexpected error waiting for response: %v", err)
+	}
+
+	if resp == "" || resp == protocol.CmdPong {
+		t.Fatalf("expected command output, got %q", resp)
+	}
+
+	if !pauseChanReset(pauseChan) {
+		t.Fatal("expected pause channel reset after response")
+	}
+}
+
+// pauseChanReset verifies a pause channel received the resume signal (false)
+func pauseChanReset(ch chan bool) bool {
+	select {
+	case v := <-ch:
+		return v == false
+	default:
+		return false
+	}
 }

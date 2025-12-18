@@ -12,14 +12,14 @@ import (
 
 func printHeader() {
 	fmt.Println()
-	fmt.Println("  ██████╗  ██████╗ ████████╗███████╗")
-	fmt.Println("  ██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝")
-	fmt.Println("  ██║  ███╗██║   ██║   ██║   ███████╗")
-	fmt.Println("  ██║   ██║██║   ██║   ██║   ╚════██║")
-	fmt.Println("  ╚██████╔╝╚██████╔╝   ██║   ███████║")
-	fmt.Println("   ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝")
+	fmt.Println(` ██████╗  ██████╗ ████████╗ ██████╗  ██████╗  `)
+	fmt.Println(`██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝ ██╔══██╗ `)
+	fmt.Println(`██║  ███╗██║   ██║   ██║   ██████╗  ██████╔╝ `)
+	fmt.Println(`██║   ██║██║   ██║   ██║   ██╔══██╗ ██╔══██╗ `)
+	fmt.Println(`╚██████╔╝╚██████╔╝   ██║   ╚██████╔╝██║  ██║ `)
+	fmt.Println(` ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝ `)
 	fmt.Println()
-	fmt.Println("  PIPELEEK - Go TLS Reverse Shell")
+	fmt.Println("  GOTSR - Go TLS Reverse Client")
 	fmt.Println()
 }
 

