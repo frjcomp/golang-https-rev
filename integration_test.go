@@ -426,6 +426,9 @@ func freePort(t *testing.T) string {
 func buildBinary(t *testing.T, name, pkg string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), name)
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(out), ".exe") {
+		out += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", out, pkg)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
