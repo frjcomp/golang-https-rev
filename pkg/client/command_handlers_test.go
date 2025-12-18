@@ -7,6 +7,7 @@ import (
 "path/filepath"
 "testing"
 
+"golang-https-rev/pkg/compression"
 "golang-https-rev/pkg/protocol"
 )
 
@@ -312,26 +313,281 @@ t.Logf("Unknown command error (expected): %v", err)
 }
 }
 
-// TestConcurrentCommandHandling verifies handlers work without data races
-func TestConcurrentCommandHandling(t *testing.T) {
-client, _ := createMockClient()
-
-// Simulate rapid command processing
-commands := []string{
-protocol.CmdPing,
-"echo test1",
-protocol.CmdPing,
-"echo test2",
-protocol.CmdExit,
+// TestProcessCommandPing tests PING command via processCommand
+func TestProcessCommandPing(t *testing.T) {
+	client, output := createMockClient()
+	
+	shouldContinue, err := client.processCommand(protocol.CmdPing)
+	if err != nil {
+		t.Errorf("PING command failed: %v", err)
+	}
+	if !shouldContinue {
+		t.Error("PING should return shouldContinue=true")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte(protocol.CmdPong)) {
+		t.Errorf("Expected PONG in output, got: %s", result)
+	}
 }
 
-for i, cmd := range commands {
-shouldContinue, err := client.processCommand(cmd)
-if cmd == protocol.CmdExit && shouldContinue {
-t.Errorf("Command %d: EXIT should return shouldContinue=false", i)
+// TestProcessCommandExit tests EXIT command via processCommand
+func TestProcessCommandExit(t *testing.T) {
+	client, _ := createMockClient()
+	
+	shouldContinue, err := client.processCommand(protocol.CmdExit)
+	if err != nil {
+		t.Errorf("EXIT command failed: %v", err)
+	}
+	if shouldContinue {
+		t.Error("EXIT should return shouldContinue=false")
+	}
 }
-if cmd == protocol.CmdExit && err != nil {
-t.Errorf("Command %d: EXIT should not error, got: %v", i, err)
+
+// TestProcessCommandStartUpload tests START_UPLOAD via processCommand
+func TestProcessCommandStartUpload(t *testing.T) {
+	client, output := createMockClient()
+	
+	shouldContinue, err := client.processCommand("START_UPLOAD /tmp/test.txt 100")
+	if err != nil {
+		t.Errorf("START_UPLOAD failed: %v", err)
+	}
+	if !shouldContinue {
+		t.Error("START_UPLOAD should return shouldContinue=true")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("OK")) {
+		t.Errorf("Expected OK response, got: %s", result)
+	}
 }
+
+// TestProcessCommandUploadChunk tests UPLOAD_CHUNK via processCommand
+func TestProcessCommandUploadChunk(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// First start an upload
+	client.processCommand("START_UPLOAD /tmp/test.txt 100")
+	
+	// Now send a chunk
+	shouldContinue, err := client.processCommand("UPLOAD_CHUNK testchunkdata")
+	if err != nil {
+		t.Errorf("UPLOAD_CHUNK failed: %v", err)
+	}
+	if !shouldContinue {
+		t.Error("UPLOAD_CHUNK should return shouldContinue=true")
+	}
 }
+
+// TestProcessCommandDownload tests DOWNLOAD via processCommand
+func TestProcessCommandDownload(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create a temp file to download
+	tmpFile, err := os.CreateTemp("", "download-test-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.WriteString("test content")
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+	
+	shouldContinue, err := client.processCommand("DOWNLOAD " + tmpFile.Name())
+	if err != nil {
+		t.Errorf("DOWNLOAD failed: %v", err)
+	}
+	if !shouldContinue {
+		t.Error("DOWNLOAD should return shouldContinue=true")
+	}
+}
+
+// TestProcessCommandShellExecution tests default shell command via processCommand
+func TestProcessCommandShellExecution(t *testing.T) {
+	client, output := createMockClient()
+	
+	shouldContinue, err := client.processCommand("echo test_shell")
+	if err != nil {
+		t.Errorf("Shell command failed: %v", err)
+	}
+	if !shouldContinue {
+		t.Error("Shell command should return shouldContinue=true")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("test_shell")) {
+		t.Errorf("Expected 'test_shell' in output, got: %s", result)
+	}
+}
+// TestHandleEndUploadInvalidCommand tests malformed END_UPLOAD commands
+func TestHandleEndUploadInvalidCommand(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Test with invalid format (no path)
+	err := client.handleEndUploadCommand("END_UPLOAD")
+	if err == nil {
+		t.Error("Expected error for invalid END_UPLOAD command")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("Invalid end_upload command")) {
+		t.Errorf("Expected invalid command error, got: %s", result)
+	}
+}
+
+// TestHandleEndUploadNoActiveSession tests END_UPLOAD without START_UPLOAD
+func TestHandleEndUploadNoActiveSession(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Clear any active upload
+	client.currentUploadPath = ""
+	
+	err := client.handleEndUploadCommand("END_UPLOAD /tmp/test.txt")
+	if err == nil {
+		t.Error("Expected error when no active upload session")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("No active upload")) {
+		t.Errorf("Expected 'No active upload' error, got: %s", result)
+	}
+}
+
+// TestHandleEndUploadDecompressionError tests decompression failure
+func TestHandleEndUploadDecompressionError(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Setup with invalid compressed chunk
+	client.currentUploadPath = "/tmp/test.txt"
+	client.uploadChunks = []string{"INVALID_HEX_DATA!@#"}
+	
+	err := client.handleEndUploadCommand("END_UPLOAD /tmp/test.txt")
+	if err == nil {
+		t.Error("Expected error for decompression failure")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("Decompression error")) {
+		t.Errorf("Expected decompression error, got: %s", result)
+	}
+	
+	// Cleanup
+	client.currentUploadPath = ""
+	client.uploadChunks = nil
+}
+
+// TestHandleEndUploadWriteError tests file write failure
+func TestHandleEndUploadWriteError(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Create valid compressed data
+	testData := []byte("test content")
+	compressed, err := compression.CompressToHex(testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Setup with valid chunk but invalid path (directory doesn't exist)
+	client.currentUploadPath = "/nonexistent/dir/test.txt"
+	client.uploadChunks = []string{compressed}
+	
+	err = client.handleEndUploadCommand("END_UPLOAD /nonexistent/dir/test.txt")
+	if err == nil {
+		t.Error("Expected error for file write failure")
+	}
+	
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("Write error")) {
+		t.Errorf("Expected write error, got: %s", result)
+	}
+	
+	// Cleanup
+	client.currentUploadPath = ""
+	client.uploadChunks = nil
+}
+
+// TestHandleEndUploadSuccess tests successful file upload
+func TestHandleEndUploadSuccess(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Create temp directory
+	tmpDir := t.TempDir()
+	testFilePath := filepath.Join(tmpDir, "test.txt")
+	
+	// Create valid compressed data
+	testData := []byte("test content for successful upload")
+	compressed, err := compression.CompressToHex(testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Setup upload
+	client.currentUploadPath = testFilePath
+	client.uploadChunks = []string{compressed}
+	
+	err = client.handleEndUploadCommand("END_UPLOAD " + testFilePath)
+	if err != nil {
+		t.Errorf("Expected success, got error: %v", err)
+	}
+	
+	// Verify file was written
+	written, err := os.ReadFile(testFilePath)
+	if err != nil {
+		t.Errorf("Failed to read written file: %v", err)
+	}
+	
+	if !bytes.Equal(written, testData) {
+		t.Errorf("File content mismatch: got %q, expected %q", written, testData)
+	}
+	
+	// Verify response
+	result := output.String()
+	if !bytes.Contains([]byte(result), []byte("OK")) {
+		t.Errorf("Expected OK response, got: %s", result)
+	}
+	
+	// Verify cleanup
+	if client.currentUploadPath != "" {
+		t.Error("Expected currentUploadPath to be cleared")
+	}
+	if len(client.uploadChunks) != 0 {
+		t.Error("Expected uploadChunks to be cleared")
+	}
+}
+
+// TestHandleEndUploadMultipleChunks tests uploading file in multiple chunks
+func TestHandleEndUploadMultipleChunks(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create temp directory
+	tmpDir := t.TempDir()
+	testFilePath := filepath.Join(tmpDir, "multi_chunk.txt")
+	
+	// Create test data split into multiple parts
+	part1 := []byte("first chunk ")
+	part2 := []byte("second chunk ")
+	part3 := []byte("third chunk")
+	
+	compressed1, _ := compression.CompressToHex(part1)
+	compressed2, _ := compression.CompressToHex(part2)
+	compressed3, _ := compression.CompressToHex(part3)
+	
+	// Setup upload with multiple chunks
+	client.currentUploadPath = testFilePath
+	client.uploadChunks = []string{compressed1, compressed2, compressed3}
+	
+	err := client.handleEndUploadCommand("END_UPLOAD " + testFilePath)
+	if err != nil {
+		t.Errorf("Multi-chunk upload failed: %v", err)
+	}
+	
+	// Verify all chunks were assembled
+	written, err := os.ReadFile(testFilePath)
+	if err != nil {
+		t.Errorf("Failed to read multi-chunk file: %v", err)
+	}
+	
+	expected := append(append(part1, part2...), part3...)
+	if !bytes.Equal(written, expected) {
+		t.Errorf("Multi-chunk content mismatch: got %q, expected %q", written, expected)
+	}
 }

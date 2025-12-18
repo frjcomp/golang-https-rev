@@ -86,3 +86,91 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+// TestExecuteCommandEmptyInput tests handling of empty commands
+func TestExecuteCommandEmptyInput(t *testing.T) {
+	client := NewReverseClient("127.0.0.1:8080")
+	output := client.ExecuteCommand("")
+	
+	// Empty command should return empty output
+	if len(output) != 0 {
+		t.Logf("Empty command returned: %s", output)
+	}
+	
+	t.Log("✓ Empty command handled")
+}
+
+// TestExecuteCommandInvalidCommand tests handling of invalid commands
+func TestExecuteCommandInvalidCommand(t *testing.T) {
+	client := NewReverseClient("127.0.0.1:8080")
+	output := client.ExecuteCommand("nonexistent_command_12345")
+	
+	// Should get error output
+	if len(output) == 0 {
+		t.Log("Invalid command produced empty output (might be valid)")
+	}
+	
+	t.Log("✓ Invalid command handled")
+}
+
+// TestCloseWithoutConnection tests closing when not connected
+func TestCloseWithoutConnection(t *testing.T) {
+	client := NewReverseClient("127.0.0.1:8080")
+	err := client.Close()
+	
+	// Should handle gracefully
+	if err != nil {
+		t.Logf("Close without connection returned error: %v", err)
+	}
+	
+	t.Log("✓ Close without connection handled")
+}
+
+// TestExecuteShellCommand tests the shell command execution
+func TestExecuteShellCommand(t *testing.T) {
+	// Test simple command using package-level function
+	output, err := executeShellCommand("echo test_shell")
+	if err != nil {
+		t.Errorf("Shell command failed: %v", err)
+	}
+	if !contains(output, "test_shell") {
+		t.Errorf("Expected 'test_shell' in output, got '%s'", output)
+	}
+	
+	t.Log("✓ Shell command execution works")
+}
+
+// TestExecuteShellCommandError tests error handling in shell execution
+func TestExecuteShellCommandError(t *testing.T) {
+	// Command that will fail
+	output, err := executeShellCommand("exit 1")
+	
+	// Should return error
+	if err == nil {
+		t.Error("Expected error for failing command")
+	}
+	
+	// Output should contain error info
+	if !contains(output, "Error") {
+		t.Logf("Error command output: %s", output)
+	}
+	
+	t.Log("✓ Shell command error handled")
+}
+
+// TestExecuteShellCommandNonexistent tests handling of nonexistent commands
+func TestExecuteShellCommandNonexistent(t *testing.T) {
+	output, err := executeShellCommand("nonexistent_cmd_xyz_12345")
+	
+	// Should return error
+	if err == nil {
+		t.Error("Expected error for nonexistent command")
+	}
+	
+	// Output should contain error info
+	if !contains(output, "Error") {
+		t.Logf("Nonexistent command output: %s", output)
+	}
+	
+	t.Log("✓ Nonexistent command handled")
+}

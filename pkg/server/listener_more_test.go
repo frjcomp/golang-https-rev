@@ -104,6 +104,93 @@ func TestGetResponseFromInvalidClient(t *testing.T) {
 	t.Log("✓ Get response from invalid client test passed")
 }
 
+// TestListenerStartInvalidPort tests error when starting with invalid port
+func TestListenerStartInvalidPort(t *testing.T) {
+	cert, err := certs.GenerateSelfSignedCert()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	
+	// Invalid port
+	listener := NewListener("99999", "127.0.0.1", tlsConfig)
+	_, err = listener.Start()
+	if err == nil {
+		t.Fatal("Expected error for invalid port")
+	}
+
+	t.Log("✓ Listener start error test passed")
+}
+
+// TestGetResponseNoData tests timeout when getting response with no data
+func TestGetResponseNoData(t *testing.T) {
+	listener := createTestListenerHelper(t)
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	// Connect a client
+	conn, err := tls.Dial("tcp", netListener.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	clients := listener.GetClients()
+	if len(clients) != 1 {
+		t.Fatal("Expected 1 client")
+	}
+
+	// Try to get response with timeout (client won't send anything)
+	_, err = listener.GetResponse(clients[0], 100*time.Millisecond)
+	if err == nil {
+		t.Error("Expected timeout error when client doesn't respond")
+	}
+
+	t.Log("✓ Get response timeout test passed")
+}
+
+
+
+// TestGetClientAddressesSortedWithClients tests sorting with actual clients
+func TestGetClientAddressesSortedWithClients(t *testing.T) {
+	listener := createTestListenerHelper(t)
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	// Connect multiple clients
+	for i := 0; i < 2; i++ {
+		conn, err := tls.Dial("tcp", netListener.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+		if err != nil {
+			t.Fatalf("Failed to connect client %d: %v", i, err)
+		}
+		defer conn.Close()
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	sorted := listener.GetClientAddressesSorted()
+	if len(sorted) != 2 {
+		t.Fatalf("Expected 2 sorted clients, got %d", len(sorted))
+	}
+
+	// Verify they're sorted
+	if len(sorted) > 1 && sorted[0] > sorted[1] {
+		t.Error("Client addresses not properly sorted")
+	}
+
+	t.Log("✓ Get client addresses sorted with clients test passed")
+}
+
 // TestListenerResponseBuffering tests response buffering mechanism
 func TestListenerResponseBuffering(t *testing.T) {
 	listener := createTestListenerHelper(t)
