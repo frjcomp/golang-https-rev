@@ -106,6 +106,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 
 	send(listener, fmt.Sprintf("upload %s %s\n", localLargeNormalized, remoteLargeNormalized))
 	waitForContains(t, listener, "Uploaded", 15*time.Second)
+	// Give the connection time to settle after large file upload
+	time.Sleep(1 * time.Second)
 
 	remoteBytes := mustReadFile(t, remoteLarge)
 	if !bytes.Equal(remoteBytes, payload) {
@@ -117,6 +119,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	// Download the same file back and verify integrity.
 	send(listener, fmt.Sprintf("download %s %s\n", remoteLargeNormalized, downloadedLargeNormalized))
 	waitForContains(t, listener, "Downloaded", 15*time.Second)
+	// Give the connection time to settle after large file download
+	time.Sleep(1 * time.Second)
 
 	downloaded := mustReadFile(t, downloadedLarge)
 	if !bytes.Equal(downloaded, payload) {
@@ -258,6 +262,10 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 				waitTime = 10 * time.Second
 			}
 			waitForContains(t, listener, tc.contains, waitTime)
+			// For the very last command, add extra time for output to fully appear
+			if i == len(testCases)-1 {
+				time.Sleep(1 * time.Second)
+			}
 		} else {
 			// For commands without specific output, just give it time to execute
 			time.Sleep(300 * time.Millisecond)
