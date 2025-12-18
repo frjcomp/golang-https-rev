@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -40,17 +41,21 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
 	// List connected clients and pick the first (and only) one.
-	send(listener, "ls\n")
+	listCmd := "ls"
+	if runtime.GOOS == "windows" {
+		listCmd = "dir"
+	}
+	send(listener, listCmd+"\n")
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 	waitForContains(t, listener, "1.", 5*time.Second)
 
 	send(listener, "use 1\n")
 	waitForContains(t, listener, "Now interacting with", 5*time.Second)
 
-	// Run ls on the client and ensure both sides see activity.
-	send(listener, "ls\n")
+	// Run directory list on the client and ensure both sides see activity.
+	send(listener, listCmd+"\n")
 	waitForContains(t, listener, "go.mod", 5*time.Second)
-	waitForContains(t, reverse, "Received command: ls", 5*time.Second)
+	waitForContains(t, reverse, fmt.Sprintf("Received command: %s", listCmd), 5*time.Second)
 
 	// Run whoami on the client and assert output on both sides.
 	user := currentUser(t)
@@ -132,11 +137,28 @@ func TestLinerHistoryFeature(t *testing.T) {
 	commands := []struct {
 		input  string
 		expect string
-	}{
-		{"ls\n", "go.mod"},
-		{"whoami\n", currentUser(t)},
-		{"pwd\n", ""}, // Just verify it doesn't crash
-		{"echo test\n", "test"},
+	}{}
+
+	if runtime.GOOS == "windows" {
+		commands = []struct {
+			input  string
+			expect string
+		}{
+			{"dir\n", "go.mod"},
+			{"whoami\n", currentUser(t)},
+			{"cd\n", ""}, // print current directory
+			{"echo test\n", "test"},
+		}
+	} else {
+		commands = []struct {
+			input  string
+			expect string
+		}{
+			{"ls\n", "go.mod"},
+			{"whoami\n", currentUser(t)},
+			{"pwd\n", ""}, // Just verify it doesn't crash
+			{"echo test\n", "test"},
+		}
 	}
 
 	for _, cmd := range commands {
@@ -189,27 +211,60 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 		name     string
 		cmd      string
 		contains string // expected output substring
-	}{
-		{"echo simple", "echo hello\n", "hello"},
-		{"echo with spaces", "echo hello world\n", "hello world"},
-		{"pwd basic", "pwd\n", ""}, // any output is ok
-		{"ls basic", "ls\n", "go.mod"},
-		{"whoami", "whoami\n", currentUser(t)},
-		{"echo number", "echo 42\n", "42"},
-		{"true command", "true\n", ""},
-		{"false command", "false\n", ""},
-		{"echo multiword", "echo one two three four five\n", "one two three four five"},
-		{"date command", "date\n", ""}, // any date output
-		{"uname", "uname\n", ""},
-		{"echo test1", "echo test1\n", "test1"},
-		{"echo test2", "echo test2\n", "test2"},
-		{"echo test3", "echo test3\n", "test3"},
-		{"ls again", "ls\n", "go.mod"},
-		{"whoami again", "whoami\n", currentUser(t)},
-		{"echo x", "echo x\n", "x"},
-		{"pwd again", "pwd\n", ""},
-		{"echo y", "echo y\n", "y"},
-		{"echo z", "echo z\n", "z"},
+	}{}
+
+	if runtime.GOOS == "windows" {
+		testCases = []struct {
+			name     string
+			cmd      string
+			contains string
+		}{
+			{"echo simple", "echo hello\n", "hello"},
+			{"echo with spaces", "echo hello world\n", "hello world"},
+			{"cd basic", "cd\n", ""},
+			{"dir basic", "dir\n", "go.mod"},
+			{"whoami", "whoami\n", currentUser(t)},
+			{"echo number", "echo 42\n", "42"},
+			{"echo multiword", "echo one two three four five\n", "one two three four five"},
+			{"time", "time /T\n", ""},
+			{"ver", "ver\n", ""},
+			{"echo test1", "echo test1\n", "test1"},
+			{"echo test2", "echo test2\n", "test2"},
+			{"echo test3", "echo test3\n", "test3"},
+			{"dir again", "dir\n", "go.mod"},
+			{"whoami again", "whoami\n", currentUser(t)},
+			{"echo x", "echo x\n", "x"},
+			{"cd again", "cd\n", ""},
+			{"echo y", "echo y\n", "y"},
+			{"echo z", "echo z\n", "z"},
+		}
+	} else {
+		testCases = []struct {
+			name     string
+			cmd      string
+			contains string
+		}{
+			{"echo simple", "echo hello\n", "hello"},
+			{"echo with spaces", "echo hello world\n", "hello world"},
+			{"pwd basic", "pwd\n", ""}, // any output is ok
+			{"ls basic", "ls\n", "go.mod"},
+			{"whoami", "whoami\n", currentUser(t)},
+			{"echo number", "echo 42\n", "42"},
+			{"true command", "true\n", ""},
+			{"false command", "false\n", ""},
+			{"echo multiword", "echo one two three four five\n", "one two three four five"},
+			{"date command", "date\n", ""}, // any date output
+			{"uname", "uname\n", ""},
+			{"echo test1", "echo test1\n", "test1"},
+			{"echo test2", "echo test2\n", "test2"},
+			{"echo test3", "echo test3\n", "test3"},
+			{"ls again", "ls\n", "go.mod"},
+			{"whoami again", "whoami\n", currentUser(t)},
+			{"echo x", "echo x\n", "x"},
+			{"pwd again", "pwd\n", ""},
+			{"echo y", "echo y\n", "y"},
+			{"echo z", "echo z\n", "z"},
+		}
 	}
 
 	for i, tc := range testCases {
