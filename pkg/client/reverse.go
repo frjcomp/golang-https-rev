@@ -131,7 +131,12 @@ func (rc *ReverseClient) HandleCommands() error {
 			continue
 		}
 
-		log.Printf("Received command: %s", command)
+		// Log command but avoid logging data payloads for upload chunks
+		if strings.HasPrefix(command, protocol.CmdUploadChunk+" ") {
+			log.Printf("Received command: %s <data>", protocol.CmdUploadChunk)
+		} else {
+			log.Printf("Received command: %s", command)
+		}
 
 		if command == protocol.CmdExit {
 			return nil

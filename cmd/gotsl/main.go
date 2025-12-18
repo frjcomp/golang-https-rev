@@ -191,8 +191,13 @@ func interactiveShell(l *server.Listener) {
 					continue
 				}
 				resp, err := l.GetResponse(currentClient, 30*time.Second)
-				if err != nil || !strings.Contains(resp, "OK") {
+				if err != nil {
 					fmt.Printf("Error getting start upload response: %v\n", err)
+					currentClient = ""
+					continue
+				}
+				if !strings.Contains(resp, "OK") {
+					fmt.Printf("Error starting upload: unexpected response: %s\n", strings.TrimSpace(strings.ReplaceAll(resp, protocol.EndOfOutputMarker, "")))
 					currentClient = ""
 					continue
 				}
@@ -217,7 +222,8 @@ func interactiveShell(l *server.Listener) {
 						break
 					}
 					if !strings.Contains(resp, "OK") {
-						fmt.Printf("Chunk error: %s\n", resp)
+						cleanResp := strings.TrimSpace(strings.ReplaceAll(resp, protocol.EndOfOutputMarker, ""))
+						fmt.Printf("Chunk upload error: %s\n", cleanResp)
 						currentClient = ""
 						break
 					}

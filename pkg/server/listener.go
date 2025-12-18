@@ -135,6 +135,9 @@ func (l *Listener) handleClient(conn net.Conn) {
 	}()
 
 	// Wait for commands
+	pingTimer := time.NewTimer(protocol.PingInterval * time.Second)
+	defer pingTimer.Stop()
+
 	for {
 		select {
 		case cmd, ok := <-cmdChan:
@@ -144,15 +147,25 @@ func (l *Listener) handleClient(conn net.Conn) {
 			fmt.Fprintf(writer, "%s\n", cmd)
 			writer.Flush()
 
+			// Reset ping timer since we just sent a command
+			if !pingTimer.Stop() {
+				select {
+				case <-pingTimer.C:
+				default:
+				}
+			}
+			pingTimer.Reset(protocol.PingInterval * time.Second)
+
 			if cmd == protocol.CmdExit {
 				return
 			}
 		case <-readerFailed:
 			log.Printf("Reader failed for client %s, closing connection", clientAddr)
 			return
-		case <-time.After(protocol.PingInterval * time.Second):
+		case <-pingTimer.C:
 			fmt.Fprintf(writer, "%s\n", protocol.CmdPing)
 			writer.Flush()
+			pingTimer.Reset(protocol.PingInterval * time.Second)
 		}
 	}
 }
