@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -82,8 +83,11 @@ func (l *Listener) handleClient(conn net.Conn) {
 		log.Printf("[-] Client disconnected: %s", clientAddr)
 	}()
 
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
+	reader := bufio.NewReaderSize(conn, 1024*1024) // 1MB read buffer for large file transfers
+	writer := bufio.NewWriterSize(conn, 1024*1024) // 1MB write buffer
+
+	// Track if response reader goroutine has failed
+	readerFailed := make(chan bool, 1)
 
 	// Read responses from client
 	go func() {
@@ -91,7 +95,10 @@ func (l *Listener) handleClient(conn net.Conn) {
 		for {
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				log.Printf("Error reading from client: %v", err)
+				if err != io.EOF {
+					log.Printf("Error reading from client %s: %v", clientAddr, err)
+				}
+				readerFailed <- true
 				return
 			}
 
@@ -100,7 +107,11 @@ func (l *Listener) handleClient(conn net.Conn) {
 			// Check if we've reached the end of output marker
 			if strings.Contains(line, "<<<END_OF_OUTPUT>>>") {
 				fullResponse := responseBuffer.String()
-				respChan <- fullResponse
+				select {
+				case respChan <- fullResponse:
+				case <-time.After(5 * time.Second):
+					log.Printf("Warning: response channel full or blocked for client %s", clientAddr)
+				}
 				responseBuffer.Reset()
 			}
 		}
@@ -119,6 +130,9 @@ func (l *Listener) handleClient(conn net.Conn) {
 			if cmd == "exit" {
 				return
 			}
+		case <-readerFailed:
+			log.Printf("Reader failed for client %s, closing connection", clientAddr)
+			return
 		case <-time.After(30 * time.Second):
 			fmt.Fprintf(writer, "PING\n")
 			writer.Flush()
