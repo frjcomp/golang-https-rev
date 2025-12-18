@@ -116,7 +116,7 @@ func (rc *ReverseClient) handleDownloadCommand(command string) error {
 		return fmt.Errorf("compression failed: %w", err)
 	}
 
-	rc.writer.WriteString(compressed + "\n" + protocol.EndOfOutputMarker + "\n")
+	rc.writer.WriteString(protocol.DataPrefix + compressed + "\n" + protocol.EndOfOutputMarker + "\n")
 	return rc.writer.Flush()
 }
 

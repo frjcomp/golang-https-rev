@@ -87,6 +87,8 @@ func connectWithRetry(target string, maxRetries int, newClient clientFactory, sl
 			continue
 		}
 
+		log.Printf("Connected to listener successfully")
+
 		if err := cl.HandleCommands(); err != nil {
 			log.Printf("Connection failed: %v", err)
 			_ = cl.Close()
