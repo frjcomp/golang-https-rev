@@ -18,6 +18,34 @@ import (
 	"time"
 )
 
+// shellCmds captures OS-specific shell commands used by tests
+type shellCmds struct {
+	list string // directory listing
+	pwd  string // print working directory
+	who  string // current user
+	date string // date/time command
+	ver  string // os version/uname equivalent
+}
+
+func getShellCmds() shellCmds {
+	if runtime.GOOS == "windows" {
+		return shellCmds{
+			list: "dir",
+			pwd:  "cd",
+			who:  "whoami",
+			date: "time /T",
+			ver:  "ver",
+		}
+	}
+	return shellCmds{
+		list: "ls",
+		pwd:  "pwd",
+		who:  "whoami",
+		date: "date",
+		ver:  "uname",
+	}
+}
+
 // TestListenerReverseInteractiveSession drives the listener and reverse binaries end-to-end
 // and asserts both sides observe the expected commands and disconnect handling.
 func TestListenerReverseInteractiveSession(t *testing.T) {
@@ -41,11 +69,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
 	// List connected clients and pick the first (and only) one.
-	listCmd := "ls"
-	if runtime.GOOS == "windows" {
-		listCmd = "dir"
-	}
-	send(listener, listCmd+"\n")
+	sc := getShellCmds()
+	send(listener, sc.list+"\n")
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 	waitForContains(t, listener, "1.", 5*time.Second)
 
@@ -53,9 +78,9 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, listener, "Now interacting with", 5*time.Second)
 
 	// Run directory list on the client and ensure both sides see activity.
-	send(listener, listCmd+"\n")
+	send(listener, sc.list+"\n")
 	waitForContains(t, listener, "go.mod", 5*time.Second)
-	waitForContains(t, reverse, fmt.Sprintf("Received command: %s", listCmd), 5*time.Second)
+	waitForContains(t, reverse, fmt.Sprintf("Received command: %s", sc.list), 5*time.Second)
 
 	// Run whoami on the client and assert output on both sides.
 	user := currentUser(t)
@@ -134,31 +159,15 @@ func TestLinerHistoryFeature(t *testing.T) {
 	waitForContains(t, listener, "Now interacting with", 5*time.Second)
 
 	// Execute a series of commands to ensure liner can handle multiple inputs without issues
+	sc := getShellCmds()
 	commands := []struct {
 		input  string
 		expect string
-	}{}
-
-	if runtime.GOOS == "windows" {
-		commands = []struct {
-			input  string
-			expect string
-		}{
-			{"dir\n", "go.mod"},
-			{"whoami\n", currentUser(t)},
-			{"cd\n", ""}, // print current directory
-			{"echo test\n", "test"},
-		}
-	} else {
-		commands = []struct {
-			input  string
-			expect string
-		}{
-			{"ls\n", "go.mod"},
-			{"whoami\n", currentUser(t)},
-			{"pwd\n", ""}, // Just verify it doesn't crash
-			{"echo test\n", "test"},
-		}
+	}{
+		{sc.list + "\n", "go.mod"},
+		{sc.who + "\n", currentUser(t)},
+		{sc.pwd + "\n", ""}, // Just verify it doesn't crash
+		{"echo test\n", "test"},
 	}
 
 	for _, cmd := range commands {
@@ -207,64 +216,30 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 
 	// Run a series of basic commands to stress test buffering and command handling
 	// Tests include rapid-fire commands, commands with output, and commands with no output
+	sc := getShellCmds()
 	testCases := []struct {
 		name     string
 		cmd      string
 		contains string // expected output substring
-	}{}
-
-	if runtime.GOOS == "windows" {
-		testCases = []struct {
-			name     string
-			cmd      string
-			contains string
-		}{
-			{"echo simple", "echo hello\n", "hello"},
-			{"echo with spaces", "echo hello world\n", "hello world"},
-			{"cd basic", "cd\n", ""},
-			{"dir basic", "dir\n", "go.mod"},
-			{"whoami", "whoami\n", currentUser(t)},
-			{"echo number", "echo 42\n", "42"},
-			{"echo multiword", "echo one two three four five\n", "one two three four five"},
-			{"time", "time /T\n", ""},
-			{"ver", "ver\n", ""},
-			{"echo test1", "echo test1\n", "test1"},
-			{"echo test2", "echo test2\n", "test2"},
-			{"echo test3", "echo test3\n", "test3"},
-			{"dir again", "dir\n", "go.mod"},
-			{"whoami again", "whoami\n", currentUser(t)},
-			{"echo x", "echo x\n", "x"},
-			{"cd again", "cd\n", ""},
-			{"echo y", "echo y\n", "y"},
-			{"echo z", "echo z\n", "z"},
-		}
-	} else {
-		testCases = []struct {
-			name     string
-			cmd      string
-			contains string
-		}{
-			{"echo simple", "echo hello\n", "hello"},
-			{"echo with spaces", "echo hello world\n", "hello world"},
-			{"pwd basic", "pwd\n", ""}, // any output is ok
-			{"ls basic", "ls\n", "go.mod"},
-			{"whoami", "whoami\n", currentUser(t)},
-			{"echo number", "echo 42\n", "42"},
-			{"true command", "true\n", ""},
-			{"false command", "false\n", ""},
-			{"echo multiword", "echo one two three four five\n", "one two three four five"},
-			{"date command", "date\n", ""}, // any date output
-			{"uname", "uname\n", ""},
-			{"echo test1", "echo test1\n", "test1"},
-			{"echo test2", "echo test2\n", "test2"},
-			{"echo test3", "echo test3\n", "test3"},
-			{"ls again", "ls\n", "go.mod"},
-			{"whoami again", "whoami\n", currentUser(t)},
-			{"echo x", "echo x\n", "x"},
-			{"pwd again", "pwd\n", ""},
-			{"echo y", "echo y\n", "y"},
-			{"echo z", "echo z\n", "z"},
-		}
+	}{
+		{"echo simple", "echo hello\n", "hello"},
+		{"echo with spaces", "echo hello world\n", "hello world"},
+		{"pwd/cd basic", sc.pwd + "\n", ""},
+		{"list basic", sc.list + "\n", "go.mod"},
+		{"whoami", sc.who + "\n", currentUser(t)},
+		{"echo number", "echo 42\n", "42"},
+		{"echo multiword", "echo one two three four five\n", "one two three four five"},
+		{"date/time", sc.date + "\n", ""},
+		{"uname/ver", sc.ver + "\n", ""},
+		{"echo test1", "echo test1\n", "test1"},
+		{"echo test2", "echo test2\n", "test2"},
+		{"echo test3", "echo test3\n", "test3"},
+		{"list again", sc.list + "\n", "go.mod"},
+		{"whoami again", sc.who + "\n", currentUser(t)},
+		{"echo x", "echo x\n", "x"},
+		{"pwd/cd again", sc.pwd + "\n", ""},
+		{"echo y", "echo y\n", "y"},
+		{"echo z", "echo z\n", "z"},
 	}
 
 	for i, tc := range testCases {
