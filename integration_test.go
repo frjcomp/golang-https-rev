@@ -87,6 +87,9 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	send(listener, "whoami\n")
 	waitForContains(t, listener, user, 5*time.Second)
 	waitForContains(t, reverse, "Received command: whoami", 5*time.Second)
+	
+	// Increased delay for Windows stability - connection seems to drop after whoami on Windows
+	time.Sleep(2 * time.Second)
 
 	// Skip large file transfer test on Windows due to connection stability issues
 	// The file transfer functionality works but has intermittent connection closure
