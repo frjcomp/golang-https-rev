@@ -9,15 +9,14 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"golang-https-rev/pkg/certs"
 	"golang-https-rev/pkg/compression"
 	"golang-https-rev/pkg/protocol"
 	"golang-https-rev/pkg/server"
 	"golang-https-rev/pkg/version"
+	"golang.org/x/term"
 )
 
 func printHeader() {
@@ -333,7 +332,8 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 	fmt.Println("Press Ctrl-C to send interrupt to remote shell.")
 
 	// Setup raw terminal mode for local terminal
-	oldState, err := setRawMode()
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
 	if err != nil {
 		fmt.Printf("Warning: Could not set raw mode: %v\n", err)
 		// Continue anyway
@@ -342,11 +342,9 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 		// Clear any read deadlines on stdin
 		os.Stdin.SetReadDeadline(time.Time{})
 		
-    	// Restore terminal state
-    	// Restore terminal state to what it was before PTY mode
-    	// The REPL handles input normally outside PTY mode; restore the saved state
+		// Restore terminal state
 		if oldState != nil {
-			restoreTerminal(oldState)
+			term.Restore(fd, oldState)
 		}
 		
 		// Force a newline to reset the terminal display
@@ -471,32 +469,4 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 	wg.Wait()
 }
 
-func setRawMode() (*syscall.Termios, error) {
-	// Get current terminal state
-	var oldState syscall.Termios
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&oldState))); err != 0 {
-		return nil, fmt.Errorf("failed to get terminal state: %v", err)
-	}
 
-	// Set raw mode
-	newState := oldState
-	newState.Lflag &^= syscall.ECHO | syscall.ICANON | syscall.ISIG
-	newState.Iflag &^= syscall.ICRNL | syscall.INPCK | syscall.ISTRIP | syscall.IXON
-	newState.Oflag &^= syscall.OPOST
-	newState.Cflag |= syscall.CS8
-	newState.Cc[syscall.VMIN] = 1
-	newState.Cc[syscall.VTIME] = 0
-
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&newState))); err != 0 {
-		return nil, fmt.Errorf("failed to set raw mode: %v", err)
-	}
-
-	return &oldState, nil
-}
-
-func restoreTerminal(oldState *syscall.Termios) {
-	// Restore terminal to original state
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(oldState))); err != 0 {
-		log.Printf("Warning: failed to restore terminal state: %v", err)
-	}
-}
