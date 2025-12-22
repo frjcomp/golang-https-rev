@@ -433,14 +433,11 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 					return
 				}
 
-				// **CRITICAL**: Double-check before sending - use blocking receive with timeout
-				// This ensures we don't proceed if the remote has exited
+				// **CRITICAL**: Double-check before sending in case remote just exited
 				select {
 				case <-exitPty:
-					// Remote closed, don't send this data
 					return
-				case <-time.After(1 * time.Millisecond):
-					// Timeout - proceed with send (remote hasn't signaled exit yet)
+				default:
 				}
 
 				// Send data immediately to PTY
@@ -463,30 +460,15 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 	<-exitPty
 
 	// Force any blocking stdin read to unblock immediately
-	os.Stdin.SetDeadline(time.Now())
+	_ = os.Stdin.SetReadDeadline(time.Now())
 
 	// Exit PTY mode (sending PTY_EXIT but not waiting for response - client might have already exited)
 	fmt.Println("\nExiting PTY shell...")
-	l.SendCommand(clientAddr, protocol.CmdPtyExit)
-	time.Sleep(50 * time.Millisecond)
-	
+	_ = l.SendCommand(clientAddr, protocol.CmdPtyExit)
 	l.ExitPtyMode(clientAddr)
-	
-	// **CRITICAL**: Wait for both goroutines to fully finish before returning
-	// This prevents them from competing with the REPL for stdin input
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
 
-	select {
-	case <-done:
-		// Both goroutines finished
-	case <-time.After(500 * time.Millisecond):
-		// Timeout waiting for goroutines - just return anyway
-		log.Printf("Warning: PTY goroutines still running after timeout")
-	}
+	// Wait for both goroutines to fully finish before returning
+	wg.Wait()
 }
 
 func setRawMode() (*syscall.Termios, error) {
