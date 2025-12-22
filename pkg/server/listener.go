@@ -91,27 +91,27 @@ func (l *Listener) handleClient(conn net.Conn) {
 	// Perform authentication if shared secret is configured
 	if l.sharedSecret != "" {
 		// Wait for AUTH command
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Printf("[-] Authentication failed for %s: failed to read auth: %v", clientAddr, err)
-			return
-		}
+    	line, err := reader.ReadString('\n')
+    	if err != nil {
+    		log.Printf("WARNING: Authentication failed for %s: failed to read auth: %v", clientAddr, err)
+    		return
+    	}
 
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, protocol.CmdAuth+" ") {
-			log.Printf("[-] Authentication failed for %s: expected AUTH command", clientAddr)
-			writer.WriteString(protocol.CmdAuthFailed + "\n")
-			writer.Flush()
-			return
-		}
+    	if !strings.HasPrefix(line, protocol.CmdAuth+" ") {
+    		log.Printf("WARNING: Authentication failed for %s: expected AUTH command", clientAddr)
+    		writer.WriteString(protocol.CmdAuthFailed + "\n")
+    		writer.Flush()
+    		return
+    	}
 
 		receivedSecret := strings.TrimPrefix(line, protocol.CmdAuth+" ")
-		if receivedSecret != l.sharedSecret {
-			log.Printf("[-] Authentication failed for %s: invalid secret", clientAddr)
-			writer.WriteString(protocol.CmdAuthFailed + "\n")
-			writer.Flush()
-			return
-		}
+    	if receivedSecret != l.sharedSecret {
+    		log.Printf("WARNING: Authentication failed for %s: invalid secret", clientAddr)
+    		writer.WriteString(protocol.CmdAuthFailed + "\n")
+    		writer.Flush()
+    		return
+    	}
 
 		// Authentication successful
 		writer.WriteString(protocol.CmdAuthOk + "\n")
