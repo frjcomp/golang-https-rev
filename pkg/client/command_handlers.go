@@ -323,8 +323,9 @@ func (rc *ReverseClient) handlePtyExitCommand() error {
 
 	rc.ptyCmd = nil
 
-	rc.writer.WriteString("Exited PTY mode\n" + protocol.EndOfOutputMarker + "\n")
-	return rc.writer.Flush()
+	// Don't send a response for PTY_EXIT; it's an internal state change
+	// The listener doesn't expect a response and will cause buffering issues on re-entry
+	return nil
 }
 
 // winsize struct for PTY window size

@@ -601,7 +601,7 @@ func TestPtyModeReentry(t *testing.T) {
 	for attempt := 1; attempt <= numRetries; attempt++ {
 		t.Logf("Attempt %d: Testing PTY entry/exit cycle", attempt)
 		
-		client, output := createMockClient()
+		client, _ := createMockClient()
 		
 		// Verify not in PTY mode initially
 		if client.inPtyMode {
@@ -660,12 +660,8 @@ func TestPtyModeReentry(t *testing.T) {
 			continue
 		}
 		
-		// Verify exit message in output
-		result := output.String()
-		if !bytes.Contains([]byte(result), []byte("Exited PTY mode")) {
-			t.Errorf("Attempt %d: Expected 'Exited PTY mode' in output, got: %s", attempt, result)
-			continue
-		}
+		// Note: PTY_EXIT no longer sends a response message (internal state change only)
+		// The important thing is that we can re-enter without errors on next iteration
 		
 		// Verify the old PTY file is closed
 		// Try to read from it - should fail gracefully
