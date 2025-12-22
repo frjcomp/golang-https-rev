@@ -21,13 +21,13 @@ func TestListenerCreation(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19000", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	if listener == nil {
 		t.Fatal("Failed to create listener")
 	}
 
-	if listener.port != "19000" {
-		t.Fatalf("Expected port 19000, got %s", listener.port)
+	if listener.port == "" {
+		t.Fatalf("Expected non-empty port, got empty string")
 	}
 
 	t.Log("✓ Listener created successfully")
@@ -41,7 +41,7 @@ func TestGetClients(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19001", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	clients := listener.GetClients()
 
 	if len(clients) != 0 {
@@ -59,7 +59,7 @@ func TestSendCommand(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19002", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 
 	// Try sending to non-existent client
 	err := listener.SendCommand("127.0.0.1:9999", "test")
@@ -78,7 +78,7 @@ func TestGetResponse(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19003", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 
 	// Try getting response from non-existent client
 	_, err := listener.GetResponse("127.0.0.1:9999", 1*time.Second)
@@ -97,7 +97,7 @@ func TestEnterPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19004", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	// Add a mock client
 	clientAddr := "127.0.0.1:5000"
@@ -128,7 +128,7 @@ func TestEnterPtyModeNonExistentClient(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19005", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	_, err := listener.EnterPtyMode("127.0.0.1:9999")
 	if err == nil {
@@ -146,7 +146,7 @@ func TestEnterPtyModeAlreadyInPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19006", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:5001"
 	listener.clientConnections[clientAddr] = make(chan string)
@@ -174,7 +174,7 @@ func TestExitPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19007", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:5002"
 	listener.clientConnections[clientAddr] = make(chan string)
@@ -206,7 +206,7 @@ func TestExitPtyModeNotInPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19008", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:5003"
 	
@@ -227,7 +227,7 @@ func TestIsInPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19009", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:5004"
 	listener.clientConnections[clientAddr] = make(chan string)
@@ -256,7 +256,7 @@ func TestGetPtyDataChan(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19010", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:5005"
 	listener.clientConnections[clientAddr] = make(chan string)
@@ -290,7 +290,7 @@ func TestHandleClientBasicCommand(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19011", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	netListener, err := listener.Start()
 	if err != nil {
 		t.Fatalf("Failed to start listener: %v", err)
@@ -315,7 +315,7 @@ func TestHandleClientMultipleClients(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19012", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 
 	// Simulate adding multiple clients
 	listener.clientConnections["client1"] = make(chan string, 10)
@@ -338,7 +338,7 @@ func TestHandleClientSendingCommands(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19013", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 
 	// Simulate a client
 	clientAddr := "127.0.0.1:9999"
@@ -373,7 +373,7 @@ func TestHandleClientAuthenticationFailure(t *testing.T) {
 	}
 
 	// Create listener with shared secret
-	listener := NewListener("19014", "127.0.0.1", tlsConfig, "secret123")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "secret123")
 
 	// Verify the listener was created with the secret
 	if listener.sharedSecret != "secret123" {
@@ -391,7 +391,7 @@ func TestHandleClientPtyMode(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19015", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 
 	clientAddr := "127.0.0.1:10000"
 	listener.clientConnections[clientAddr] = make(chan string, 10)
@@ -439,7 +439,7 @@ func TestHandleClientReadResponseFailure(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19016", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	// Verify listener can handle connection errors gracefully
 	if listener == nil {
@@ -457,7 +457,7 @@ func TestHandleClientPingAndResponse(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19017", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	// Simulate a client
 	clientAddr := "127.0.0.1:50000"
@@ -484,7 +484,7 @@ func TestHandleClientPtyDataResponse(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19018", "127.0.0.1", tlsConfig, "")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
 	
 	clientAddr := "127.0.0.1:50001"
 	
@@ -519,7 +519,7 @@ func TestHandleClientAuthenticationSuccess(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19019", "127.0.0.1", tlsConfig, "secret123")
+	listener := NewListener("0", "127.0.0.1", tlsConfig, "secret123")
 	
 	// Verify the shared secret is set
 	if listener.sharedSecret != "secret123" {
