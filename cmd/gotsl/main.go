@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"bufio"
 	"log"
@@ -33,16 +34,22 @@ func printHeader() {
 }
 
 func main() {
-	if err := runListener(os.Args[1:]); err != nil {
+	var useSharedSecret bool
+	flag.BoolVar(&useSharedSecret, "s", false, "Enable shared secret authentication")
+	flag.BoolVar(&useSharedSecret, "shared-secret", false, "Enable shared secret authentication")
+	flag.Parse()
+
+	args := flag.Args()
+	if err := runListener(args, useSharedSecret); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func runListener(args []string) error {
+func runListener(args []string, useSharedSecret bool) error {
 	printHeader()
 
 	if len(args) != 2 {
-		return fmt.Errorf("Usage: gotsl <port> <network-interface>")
+		return fmt.Errorf("Usage: gotsl [-s|--shared-secret] <port> <network-interface>")
 	}
 
 	port := args[0]
@@ -56,6 +63,18 @@ func runListener(args []string) error {
 	
 	log.Printf("Certificate generated successfully (SHA256: %s)", fingerprint)
 
+	var secret string
+	if useSharedSecret {
+		secret, err = certs.GenerateSecret()
+		if err != nil {
+			return fmt.Errorf("failed to generate shared secret: %w", err)
+		}
+		log.Printf("✓ Shared secret authentication enabled")
+		log.Printf("Secret: %s", secret)
+		log.Printf("\nTo connect, use:")
+		log.Printf("  gotsr -s %s --cert-fingerprint %s %s:%s <max-retries>\n", secret, fingerprint, networkInterface, port)
+	}
+
 	log.Printf("Version: %s (commit %s, date %s)", version.Version, version.Commit, version.Date)
 
 	// Create TLS config
@@ -65,7 +84,7 @@ func runListener(args []string) error {
 	}
 
 	// Create listener
-	listener := server.NewListener(port, networkInterface, tlsConfig)
+	listener := server.NewListener(port, networkInterface, tlsConfig, secret)
 	netListener, err := listener.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)

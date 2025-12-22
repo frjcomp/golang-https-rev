@@ -6,7 +6,7 @@ import (
 
 // TestReverseClientCreation tests creating a new reverse client
 func TestReverseClientCreation(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	if client == nil {
 		t.Fatal("Failed to create reverse client")
 	}
@@ -20,7 +20,7 @@ func TestReverseClientCreation(t *testing.T) {
 
 // TestIsConnected tests the IsConnected method
 func TestIsConnected(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	if client.IsConnected() {
 		t.Fatal("Client should not be connected initially")
 	}
@@ -30,7 +30,7 @@ func TestIsConnected(t *testing.T) {
 
 // TestExecuteCommand tests command execution
 func TestExecuteCommand(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	output := client.ExecuteCommand("echo hello")
 
 	if !contains(output, "hello") {
@@ -42,7 +42,7 @@ func TestExecuteCommand(t *testing.T) {
 
 // TestExecuteMultipleCommands tests executing multiple commands
 func TestExecuteMultipleCommands(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 
 	commands := []string{
 		"echo test1",
@@ -63,7 +63,7 @@ func TestExecuteMultipleCommands(t *testing.T) {
 
 // TestExecuteCommandWithPath tests command execution with path output
 func TestExecuteCommandWithPath(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	output := client.ExecuteCommand("pwd")
 
 	if len(output) == 0 {
@@ -89,7 +89,7 @@ func contains(s, substr string) bool {
 
 // TestExecuteCommandEmptyInput tests handling of empty commands
 func TestExecuteCommandEmptyInput(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	output := client.ExecuteCommand("")
 	
 	// Empty command should return empty output
@@ -102,7 +102,7 @@ func TestExecuteCommandEmptyInput(t *testing.T) {
 
 // TestExecuteCommandInvalidCommand tests handling of invalid commands
 func TestExecuteCommandInvalidCommand(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	output := client.ExecuteCommand("nonexistent_command_12345")
 	
 	// Should get error output
@@ -115,7 +115,7 @@ func TestExecuteCommandInvalidCommand(t *testing.T) {
 
 // TestCloseWithoutConnection tests closing when not connected
 func TestCloseWithoutConnection(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:8080")
+	client := NewReverseClient("127.0.0.1:8080", "", "")
 	err := client.Close()
 	
 	// Should handle gracefully

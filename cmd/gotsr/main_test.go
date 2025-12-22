@@ -40,13 +40,13 @@ func (f *fakeClient) Close() error { f.closed++; return nil }
 func noSleep(time.Duration) {}
 
 func TestRunClientArgValidation(t *testing.T) {
-	if err := runClient([]string{}); err == nil {
+	if err := runClient([]string{}, "", ""); err == nil {
 		t.Fatal("expected error for missing args")
 	}
-	if err := runClient([]string{"127.0.0.1:8443"}); err == nil {
+	if err := runClient([]string{"127.0.0.1:8443"}, "", ""); err == nil {
 		t.Fatal("expected error for too few args")
 	}
-	if err := runClient([]string{"host:8443", "invalid_number", "extra"}); err == nil {
+	if err := runClient([]string{"host:8443", "invalid_number", "extra"}, "", ""); err == nil {
 		t.Fatal("expected error for too many args")
 	}
 }
@@ -59,7 +59,7 @@ func TestRunClientValidArgs(t *testing.T) {
 	// Can't actually run it without a real server, but we can test arg parsing
 	done := make(chan error, 1)
 	go func() {
-		done <- runClient(args)
+		done <- runClient(args, "", "")
 	}()
 	
 	select {
@@ -78,13 +78,13 @@ func TestPrintHeader(t *testing.T) {
 func TestConnectWithRetry_MaxRetriesReachedOnConnectFailures(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{errors.New("fail"), errors.New("fail"), errors.New("fail")}}
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
 		return fc
 	}
 
 	done := make(chan struct{})
-	go func() { connectWithRetry("127.0.0.1:8443", 3, factory, noSleep); close(done) }()
+	go func() { connectWithRetry("127.0.0.1:8443", 3, "", "", factory, noSleep); close(done) }()
 
 	select {
 	case <-done:
@@ -104,13 +104,13 @@ func TestConnectWithRetry_MaxRetriesReachedOnConnectFailures(t *testing.T) {
 func TestConnectWithRetry_ReconnectAfterHandleCommandsError(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{nil, errors.New("fail")}, handleErrs: []error{errors.New("session error")}}
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
 		return fc
 	}
 
 	done := make(chan struct{})
-	go func() { connectWithRetry("127.0.0.1:8443", 2, factory, noSleep); close(done) }()
+	go func() { connectWithRetry("127.0.0.1:8443", 2, "", "", factory, noSleep); close(done) }()
 
 	select {
 	case <-done:
@@ -133,7 +133,7 @@ func TestConnectWithRetry_ReconnectAfterHandleCommandsError(t *testing.T) {
 func TestConnectWithRetrySuccessful(t *testing.T) {
 	fc := &fakeClient{} // No errors
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
 		return fc
 	}
@@ -141,7 +141,7 @@ func TestConnectWithRetrySuccessful(t *testing.T) {
 	// Run with 1 retry so it exits after HandleCommands returns nil
 	done := make(chan struct{})
 	go func() {
-		connectWithRetry("127.0.0.1:8443", 0, factory, noSleep)
+		connectWithRetry("127.0.0.1:8443", 0, "", "", factory, noSleep)
 		close(done)
 	}()
 
@@ -162,7 +162,7 @@ func TestConnectWithRetryInfiniteRetries(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{errors.New("fail"), errors.New("fail")}}
 	var mu sync.Mutex
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		mu.Lock()
 		created++
 		mu.Unlock()
@@ -172,7 +172,7 @@ func TestConnectWithRetryInfiniteRetries(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		// This should keep trying forever, but we'll stop after a few attempts
-		connectWithRetry("127.0.0.1:8443", 0, factory, noSleep)
+		connectWithRetry("127.0.0.1:8443", 0, "", "", factory, noSleep)
 		close(done)
 	}()
 
@@ -199,14 +199,14 @@ func TestConnectWithRetryBackoffMaximum(t *testing.T) {
 	}}
 	
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
 		return fc
 	}
 
 	done := make(chan struct{})
 	go func() {
-		connectWithRetry("127.0.0.1:8443", 5, factory, noSleep)
+		connectWithRetry("127.0.0.1:8443", 5, "", "", factory, noSleep)
 		close(done)
 	}()
 
@@ -230,14 +230,14 @@ func TestConnectWithRetryHandleCommandsSuccess(t *testing.T) {
 	}
 	
 	created := 0
-	factory := func(target string) reverseClient {
+	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
 		return fc
 	}
 
 	done := make(chan struct{})
 	go func() {
-		connectWithRetry("127.0.0.1:8443", 2, factory, noSleep)
+		connectWithRetry("127.0.0.1:8443", 2, "", "", factory, noSleep)
 		close(done)
 	}()
 

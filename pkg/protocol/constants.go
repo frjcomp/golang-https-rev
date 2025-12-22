@@ -17,6 +17,9 @@ const (
 	// Commands
 	CmdPing        = "PING"
 	CmdPong        = "PONG"
+	CmdAuth        = "AUTH"         // Authentication handshake
+	CmdAuthOk      = "AUTH_OK"      // Authentication successful
+	CmdAuthFailed  = "AUTH_FAILED"  // Authentication failed
 	CmdExit        = "exit"
 	CmdStartUpload = "START_UPLOAD"
 	CmdUploadChunk = "UPLOAD_CHUNK"

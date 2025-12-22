@@ -21,7 +21,7 @@ func TestClientConnect(t *testing.T) {
 
 	addr := netListener.Addr().String()
 
-	client := NewReverseClient(addr)
+	client := NewReverseClient(addr, "", "")
 	if client == nil {
 		t.Fatal("NewReverseClient returned nil")
 	}
@@ -44,7 +44,7 @@ func TestClientConnect(t *testing.T) {
 
 // TestClientConnectFailure tests connection to non-existent server
 func TestClientConnectFailure(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:9999")
+	client := NewReverseClient("127.0.0.1:9999", "", "")
 	err := client.Connect()
 	if err == nil {
 		t.Fatal("Expected connection error to non-existent server")
@@ -68,7 +68,7 @@ func TestClientClose(t *testing.T) {
 
 	addr := netListener.Addr().String()
 
-	client := NewReverseClient(addr)
+	client := NewReverseClient(addr, "", "")
 	err = client.Connect()
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
@@ -92,7 +92,7 @@ func TestClientClose(t *testing.T) {
 
 // TestClientExecuteCommand tests command execution with output
 func TestClientExecuteCommand(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:9999")
+	client := NewReverseClient("127.0.0.1:9999", "", "")
 	
 	// Test echo command which works cross-platform
 	output := client.ExecuteCommand("echo test_output")
@@ -109,7 +109,7 @@ func TestClientExecuteCommand(t *testing.T) {
 
 // TestClientExecuteCommandError tests command execution with error
 func TestClientExecuteCommandError(t *testing.T) {
-	client := NewReverseClient("127.0.0.1:9999")
+	client := NewReverseClient("127.0.0.1:9999", "", "")
 	
 	// Execute a command that will fail
 	output := client.ExecuteCommand("false 2>&1 || true")
@@ -132,7 +132,7 @@ func TestClientCommandReception(t *testing.T) {
 
 	addr := netListener.Addr().String()
 
-	client := NewReverseClient(addr)
+	client := NewReverseClient(addr, "", "")
 	err = client.Connect()
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
@@ -162,7 +162,7 @@ func TestClientUploadFlow(t *testing.T) {
 
 	addr := netListener.Addr().String()
 
-	client := NewReverseClient(addr)
+	client := NewReverseClient(addr, "", "")
 	err = client.Connect()
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
@@ -198,7 +198,7 @@ func TestClientExitCommand(t *testing.T) {
 
 	addr := netListener.Addr().String()
 
-	client := NewReverseClient(addr)
+	client := NewReverseClient(addr, "", "")
 	err = client.Connect()
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
@@ -237,7 +237,7 @@ func createServerForTest(t *testing.T) *server.Listener {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	return server.NewListener("0", "127.0.0.1", tlsConfig)
+	return server.NewListener("0", "127.0.0.1", tlsConfig, "")
 }
 
 func containsStr(s, substr string) bool {
@@ -247,4 +247,99 @@ func containsStr(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// New tests: certificate fingerprint validation and shared secret authentication
+
+func TestClientFingerprintValidationSuccess(t *testing.T) {
+	cert, fingerprint, err := certs.GenerateSelfSignedCert()
+	if err != nil {
+		t.Fatalf("Failed to generate certificate: %v", err)
+	}
+
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	listener := server.NewListener("0", "127.0.0.1", tlsConfig, "")
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	addr := netListener.Addr().String()
+
+	client := NewReverseClient(addr, "", fingerprint)
+	if err := client.Connect(); err != nil {
+		t.Fatalf("Expected fingerprint validation to succeed, got error: %v", err)
+	}
+	_ = client.Close()
+}
+
+func TestClientFingerprintValidationFailure(t *testing.T) {
+	cert, _, err := certs.GenerateSelfSignedCert()
+	if err != nil {
+		t.Fatalf("Failed to generate certificate: %v", err)
+	}
+
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	listener := server.NewListener("0", "127.0.0.1", tlsConfig, "")
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	addr := netListener.Addr().String()
+
+	wrong := "0000000000000000000000000000000000000000000000000000000000000000"
+	client := NewReverseClient(addr, "", wrong)
+	if err := client.Connect(); err == nil {
+		t.Fatalf("Expected fingerprint mismatch error, got nil")
+	}
+}
+
+func TestSharedSecretAuthenticationSuccess(t *testing.T) {
+	cert, _, err := certs.GenerateSelfSignedCert()
+	if err != nil {
+		t.Fatalf("Failed to generate certificate: %v", err)
+	}
+
+	secret := "testsecret-success"
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	listener := server.NewListener("0", "127.0.0.1", tlsConfig, secret)
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	addr := netListener.Addr().String()
+
+	client := NewReverseClient(addr, secret, "")
+	if err := client.Connect(); err != nil {
+		t.Fatalf("Expected AUTH to succeed, got error: %v", err)
+	}
+	_ = client.Close()
+}
+
+func TestSharedSecretAuthenticationFailure(t *testing.T) {
+	cert, _, err := certs.GenerateSelfSignedCert()
+	if err != nil {
+		t.Fatalf("Failed to generate certificate: %v", err)
+	}
+
+	secret := "testsecret-failure"
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	listener := server.NewListener("0", "127.0.0.1", tlsConfig, secret)
+	netListener, err := listener.Start()
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
+	}
+	defer netListener.Close()
+
+	addr := netListener.Addr().String()
+
+	client := NewReverseClient(addr, "wrong-secret", "")
+	if err := client.Connect(); err == nil {
+		t.Fatalf("Expected AUTH failure, got nil")
+	}
 }

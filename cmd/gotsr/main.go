@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"golang-https-rev/pkg/client"
@@ -24,16 +24,24 @@ func printHeader() {
 }
 
 func main() {
-	if err := runClient(os.Args[1:]); err != nil {
+	var sharedSecret string
+	var certFingerprint string
+	flag.StringVar(&sharedSecret, "s", "", "Shared secret for authentication")
+	flag.StringVar(&sharedSecret, "shared-secret", "", "Shared secret for authentication")
+	flag.StringVar(&certFingerprint, "cert-fingerprint", "", "Expected server certificate SHA256 fingerprint")
+	flag.Parse()
+
+	args := flag.Args()
+	if err := runClient(args, sharedSecret, certFingerprint); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func runClient(args []string) error {
+func runClient(args []string, sharedSecret, certFingerprint string) error {
 	printHeader()
 
 	if len(args) != 2 {
-		return fmt.Errorf("Usage: gotsr <host:port|domain:port> <max-retries>")
+		return fmt.Errorf("Usage: gotsr [-s secret] [--cert-fingerprint fingerprint] <host:port|domain:port> <max-retries>")
 	}
 
 	target := args[0]
@@ -44,8 +52,16 @@ func runClient(args []string) error {
 	log.Printf("Version: %s (commit %s, date %s)", version.Version, version.Commit, version.Date)
 	log.Printf("Target: %s", target)
 	log.Printf("Max retries: %d (0 = infinite)", maxRetries)
+	if sharedSecret != "" {
+		log.Printf("Shared secret authentication: enabled")
+	}
+	if certFingerprint != "" {
+		log.Printf("Certificate fingerprint validation: enabled")
+	}
 
-	connectWithRetry(target, maxRetries, func(t string) reverseClient { return client.NewReverseClient(t) }, time.Sleep)
+	connectWithRetry(target, maxRetries, sharedSecret, certFingerprint, func(t, s, f string) reverseClient { 
+		return client.NewReverseClient(t, s, f) 
+	}, time.Sleep)
 	return nil
 }
 
@@ -55,14 +71,14 @@ type reverseClient interface {
 	Close() error
 }
 
-type clientFactory func(target string) reverseClient
+type clientFactory func(target, sharedSecret, certFingerprint string) reverseClient
 
-func connectWithRetry(target string, maxRetries int, newClient clientFactory, sleep func(time.Duration)) {
+func connectWithRetry(target string, maxRetries int, sharedSecret, certFingerprint string, newClient clientFactory, sleep func(time.Duration)) {
 	retries := 0
 	backoff := 5 * time.Second
 
 	for {
-		cl := newClient(target)
+		cl := newClient(target, sharedSecret, certFingerprint)
 		if err := cl.Connect(); err != nil {
 			log.Printf("Connection failed: %v", err)
 

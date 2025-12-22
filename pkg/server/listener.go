@@ -23,6 +23,7 @@ type Listener struct {
 	port              string
 	networkInterface  string
 	tlsConfig         *tls.Config
+	sharedSecret      string           // Optional shared secret for authentication
 	clientConnections map[string]chan string
 	clientResponses   map[string]chan string
 	clientPausePing   map[string]chan bool
@@ -32,12 +33,13 @@ type Listener struct {
 }
 
 // NewListener creates a new reverse shell listener with the given port,
-// network interface, and TLS configuration.
-func NewListener(port, networkInterface string, tlsConfig *tls.Config) *Listener {
+// network interface, TLS configuration, and optional shared secret.
+func NewListener(port, networkInterface string, tlsConfig *tls.Config, sharedSecret string) *Listener {
 	return &Listener{
 		port:              port,
 		networkInterface:  networkInterface,
 		tlsConfig:         tlsConfig,
+		sharedSecret:      sharedSecret,
 		clientConnections: make(map[string]chan string),
 		clientResponses:   make(map[string]chan string),
 		clientPausePing:   make(map[string]chan bool),
@@ -83,6 +85,43 @@ func (l *Listener) handleClient(conn net.Conn) {
 	log.Printf("\n[+] New client connected: %s", clientAddr)
 	defer conn.Close()
 
+	reader := bufio.NewReaderSize(conn, protocol.BufferSize1MB)
+	writer := bufio.NewWriterSize(conn, protocol.BufferSize1MB)
+
+	// Perform authentication if shared secret is configured
+	if l.sharedSecret != "" {
+		// Wait for AUTH command
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("[-] Authentication failed for %s: failed to read auth: %v", clientAddr, err)
+			return
+		}
+
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, protocol.CmdAuth+" ") {
+			log.Printf("[-] Authentication failed for %s: expected AUTH command", clientAddr)
+			writer.WriteString(protocol.CmdAuthFailed + "\n")
+			writer.Flush()
+			return
+		}
+
+		receivedSecret := strings.TrimPrefix(line, protocol.CmdAuth+" ")
+		if receivedSecret != l.sharedSecret {
+			log.Printf("[-] Authentication failed for %s: invalid secret", clientAddr)
+			writer.WriteString(protocol.CmdAuthFailed + "\n")
+			writer.Flush()
+			return
+		}
+
+		// Authentication successful
+		writer.WriteString(protocol.CmdAuthOk + "\n")
+		if err := writer.Flush(); err != nil {
+			log.Printf("[-] Failed to send auth response to %s: %v", clientAddr, err)
+			return
+		}
+		log.Printf("[+] Client %s authenticated successfully", clientAddr)
+	}
+
 	cmdChan := make(chan string, 10)
 	respChan := make(chan string, 10)
 	pausePing := make(chan bool, 1)
@@ -108,9 +147,6 @@ func (l *Listener) handleClient(conn net.Conn) {
 		close(respChan)
 		log.Printf("[-] Client disconnected: %s", clientAddr)
 	}()
-
-	reader := bufio.NewReaderSize(conn, protocol.BufferSize1MB)
-	writer := bufio.NewWriterSize(conn, protocol.BufferSize1MB)
 
 	// Track if response reader goroutine has failed
 	readerFailed := make(chan bool, 1)

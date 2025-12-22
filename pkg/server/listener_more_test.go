@@ -20,7 +20,7 @@ func createTestListenerHelper(t *testing.T) *Listener {
 		Certificates: []tls.Certificate{cert},
 	}
 	// Port "0" tells OS to select an available port
-	return NewListener("0", "127.0.0.1", tlsConfig)
+	return NewListener("0", "127.0.0.1", tlsConfig, "")
 }
 
 // TestGetClientAddressesSorted tests the sorted client addresses function
@@ -116,7 +116,7 @@ func TestListenerStartInvalidPort(t *testing.T) {
 	}
 
 	// Invalid port
-	listener := NewListener("99999", "127.0.0.1", tlsConfig)
+	listener := NewListener("99999", "127.0.0.1", tlsConfig, "")
 	_, err = listener.Start()
 	if err == nil {
 		t.Fatal("Expected error for invalid port")

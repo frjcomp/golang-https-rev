@@ -319,5 +319,5 @@ func createTestListener(t *testing.T, port int) *Listener {
 	}
 
 	portStr := fmt.Sprintf("%d", port)
-	return NewListener(portStr, "127.0.0.1", tlsConfig)
+	return NewListener(portStr, "127.0.0.1", tlsConfig, "")
 }

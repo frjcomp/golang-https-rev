@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -71,4 +72,14 @@ func GetCertificateFingerprint(cert tls.Certificate) (string, error) {
 	
 	hash := sha256.Sum256(cert.Certificate[0])
 	return hex.EncodeToString(hash[:]), nil
+}
+
+// GenerateSecret generates a cryptographically secure random secret
+// Returns a base64-encoded string of 32 random bytes
+func GenerateSecret() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(bytes), nil
 }

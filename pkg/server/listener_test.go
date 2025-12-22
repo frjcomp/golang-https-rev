@@ -20,7 +20,7 @@ func TestListenerCreation(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19000", "127.0.0.1", tlsConfig)
+	listener := NewListener("19000", "127.0.0.1", tlsConfig, "")
 	if listener == nil {
 		t.Fatal("Failed to create listener")
 	}
@@ -40,7 +40,7 @@ func TestGetClients(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19001", "127.0.0.1", tlsConfig)
+	listener := NewListener("19001", "127.0.0.1", tlsConfig, "")
 	clients := listener.GetClients()
 
 	if len(clients) != 0 {
@@ -58,7 +58,7 @@ func TestSendCommand(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19002", "127.0.0.1", tlsConfig)
+	listener := NewListener("19002", "127.0.0.1", tlsConfig, "")
 
 	// Try sending to non-existent client
 	err := listener.SendCommand("127.0.0.1:9999", "test")
@@ -77,7 +77,7 @@ func TestGetResponse(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	listener := NewListener("19003", "127.0.0.1", tlsConfig)
+	listener := NewListener("19003", "127.0.0.1", tlsConfig, "")
 
 	// Try getting response from non-existent client
 	_, err := listener.GetResponse("127.0.0.1:9999", 1*time.Second)

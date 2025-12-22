@@ -94,10 +94,10 @@ func TestDecompressCorruptedGzip(t *testing.T) {
 }
 
 func TestRunListenerArgValidation(t *testing.T) {
-	if err := runListener([]string{}); err == nil {
+	if err := runListener([]string{}, false); err == nil {
 		t.Fatal("expected error for missing args")
 	}
-	if err := runListener([]string{"8443"}); err == nil {
+	if err := runListener([]string{"8443"}, false); err == nil {
 		t.Fatal("expected error for too few args")
 	}
 }
