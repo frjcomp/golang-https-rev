@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -159,9 +160,12 @@ func TestConnectWithRetrySuccessful(t *testing.T) {
 func TestConnectWithRetryInfiniteRetries(t *testing.T) {
 	// Test with maxRetries=0 (infinite)
 	fc := &fakeClient{connectErrs: []error{errors.New("fail"), errors.New("fail")}}
+	var mu sync.Mutex
 	created := 0
 	factory := func(target string) reverseClient {
+		mu.Lock()
 		created++
+		mu.Unlock()
 		return fc
 	}
 
@@ -176,8 +180,11 @@ func TestConnectWithRetryInfiniteRetries(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// With infinite retries and always failing, it should keep going
-	if created < 2 {
-		t.Fatalf("expected multiple retry attempts with infinite retries, got %d", created)
+	mu.Lock()
+	attempts := created
+	mu.Unlock()
+	if attempts < 2 {
+		t.Fatalf("expected multiple retry attempts with infinite retries, got %d", attempts)
 	}
 }
 

@@ -9,8 +9,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
-	"unsafe"
 
 	"github.com/creack/pty"
 	"golang-https-rev/pkg/compression"
@@ -282,19 +280,13 @@ func (rc *ReverseClient) handlePtyResizeCommand(command string) error {
 		return fmt.Errorf("invalid cols: %v", err)
 	}
 
-	// Set window size
-	ws := &winsize{
-		Row: uint16(rows),
-		Col: uint16(cols),
+	// Set window size using cross-platform pty package
+	ws := &pty.Winsize{
+		Rows: uint16(rows),
+		Cols: uint16(cols),
 	}
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		uintptr(ptyFile.Fd()),
-		uintptr(syscall.TIOCSWINSZ),
-		uintptr(unsafe.Pointer(ws)),
-	)
-	if errno != 0 {
-		return fmt.Errorf("ioctl TIOCSWINSZ failed: %v", errno)
+	if err := pty.Setsize(ptyFile, ws); err != nil {
+		return fmt.Errorf("failed to set window size: %v", err)
 	}
 
 	return nil
@@ -326,14 +318,6 @@ func (rc *ReverseClient) handlePtyExitCommand() error {
 	// Don't send a response for PTY_EXIT; it's an internal state change
 	// The listener doesn't expect a response and will cause buffering issues on re-entry
 	return nil
-}
-
-// winsize struct for PTY window size
-type winsize struct {
-	Row uint16
-	Col uint16
-	X   uint16
-	Y   uint16
 }
 
 // handleShellCommand executes a shell command and returns output
