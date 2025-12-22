@@ -353,12 +353,11 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 		fmt.Println()
 	}()
 
-	// Channel to signal we should exit (buffered to prevent blocking)
-	exitPty := make(chan bool, 2) // Buffered for output and stdin goroutines
+	// Channel to signal we should exit (closed channel broadcasts to all goroutines)
+	exitPty := make(chan struct{})
 
-	// Track which goroutine triggered the exit to avoid double-messaging
+	// Track which goroutine triggered the exit to avoid double-closing
 	var exitOnce sync.Once
-	remoteExited := false
 
 	// Forward PTY output to stdout
 	go func() {
@@ -367,15 +366,14 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 				log.Printf("Panic in PTY output goroutine: %v", r)
 			}
 		}()
-		
+
 		for {
 			data, ok := <-ptyDataChan
 			if !ok {
 				// Channel closed - remote PTY exited
 				fmt.Printf("\r\n[Remote shell exited]\r\n")
 				exitOnce.Do(func() {
-					remoteExited = true
-					exitPty <- true
+					close(exitPty) // Broadcast exit to all goroutines
 				})
 				return
 			}
@@ -396,7 +394,7 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 		stdinBuf := make([]byte, 1024)
 
 		for {
-			// Check if we should exit BEFORE reading
+			// Check if we should exit
 			select {
 			case <-exitPty:
 				// Remote closed, stop reading stdin
@@ -411,7 +409,7 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					// Timeout, check if we should exit
+					// Timeout, check if we should exit in next iteration
 					continue
 				}
 				// EOF or error - exit gracefully
@@ -424,18 +422,19 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 				// Check for Ctrl-D (EOF)
 				if strings.Contains(string(data), "\x04") {
 					exitOnce.Do(func() {
-						exitPty <- true
+						close(exitPty)
 					})
 					return
 				}
 
-				// **CRITICAL**: Check again before sending - remote might have just closed
+				// **CRITICAL**: Double-check before sending - use blocking receive with timeout
+				// This ensures we don't proceed if the remote has exited
 				select {
 				case <-exitPty:
 					// Remote closed, don't send this data
 					return
-				default:
-					// Safe to send
+				case <-time.After(1 * time.Millisecond):
+					// Timeout - proceed with send (remote hasn't signaled exit yet)
 				}
 
 				// Send data immediately to PTY
@@ -444,30 +443,24 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 					fmt.Printf("\nError encoding input: %v\n", err)
 					return
 				}
-				
-				// **CRITICAL**: Verify client is still responsive before sending
-				// This prevents sending PTY_DATA after the client has exited PTY mode
+
+				// Send command without blocking on response
 				if err := l.SendCommand(clientAddr, protocol.CmdPtyData+" "+encoded); err != nil {
-					log.Printf("Failed to send PTY data (client may have disconnected): %v", err)
+					log.Printf("Failed to send PTY data (client disconnected): %v", err)
 					return
 				}
 			}
 		}
 	}()
 
-	// Wait for exit signal (read one since buffer is 2)
+	// Wait for exit signal
 	<-exitPty
 
-	// Exit PTY mode (unless remote already closed)
-	if !remoteExited {
-		fmt.Println("\nExiting PTY shell...")
-		// Send PTY_EXIT but don't wait for response - client might have already exited
-		l.SendCommand(clientAddr, protocol.CmdPtyExit)
-		// Brief pause to let exit command be processed
-		time.Sleep(50 * time.Millisecond)
-	}
+	// Exit PTY mode (sending PTY_EXIT but not waiting for response - client might have already exited)
+	fmt.Println("\nExiting PTY shell...")
+	l.SendCommand(clientAddr, protocol.CmdPtyExit)
+	time.Sleep(50 * time.Millisecond)
 	
-	// Exit PTY mode in listener immediately
 	l.ExitPtyMode(clientAddr)
 	
 	// Give goroutines a moment to finish
