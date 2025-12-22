@@ -462,6 +462,9 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 	// Wait for exit signal
 	<-exitPty
 
+	// Force any blocking stdin read to unblock immediately
+	os.Stdin.SetDeadline(time.Now())
+
 	// Exit PTY mode (sending PTY_EXIT but not waiting for response - client might have already exited)
 	fmt.Println("\nExiting PTY shell...")
 	l.SendCommand(clientAddr, protocol.CmdPtyExit)
