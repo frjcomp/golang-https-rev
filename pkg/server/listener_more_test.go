@@ -184,7 +184,7 @@ func TestGetClientAddressesSortedWithClients(t *testing.T) {
 
 	// Verify they're sorted
 	if len(sorted) > 1 && sorted[0] > sorted[1] {
-		t.Error("Client addresses not properly sorted")
+		t.Fatalf("Client addresses not properly sorted: %v", sorted)
 	}
 
 	t.Log("✓ Get client addresses sorted with clients test passed")

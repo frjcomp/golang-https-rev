@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -348,7 +349,8 @@ func (l *Listener) GetClientAddressesSorted() []string {
 	for addr := range l.clientConnections {
 		clients = append(clients, addr)
 	}
-	// In a real implementation, you'd sort these
+	// Sort addresses alphabetically
+	sort.Strings(clients)
 	return clients
 }
 
