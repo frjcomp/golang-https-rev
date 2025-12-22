@@ -70,7 +70,7 @@ func runListener(args []string, useSharedSecret bool) error {
 			return fmt.Errorf("failed to generate shared secret: %w", err)
 		}
 		log.Printf("✓ Shared secret authentication enabled")
-		log.Printf("Secret: %s", secret)
+		log.Printf("Secret (hex): %s", secret)
 		log.Printf("\nTo connect, use:")
 		log.Printf("  gotsr -s %s --cert-fingerprint %s %s:%s <max-retries>\n", secret, fingerprint, networkInterface, port)
 	}

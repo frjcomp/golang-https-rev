@@ -69,7 +69,7 @@ func (rc *ReverseClient) Connect() error {
 
 		if fingerprint != rc.certFingerprint {
 			conn.Close()
-			return fmt.Errorf("certificate fingerprint mismatch!\nExpected: %s\nReceived: %s\n⚠ WARNING: Possible man-in-the-middle attack!", rc.certFingerprint, fingerprint)
+			return fmt.Errorf("certificate fingerprint mismatch!\nExpected: %s\nReceived: %s\n⚠ WARNING: Possible machine-in-the-middle attack!", rc.certFingerprint, fingerprint)
 		}
 		log.Printf("✓ Certificate fingerprint validated: %s", fingerprint)
 	}

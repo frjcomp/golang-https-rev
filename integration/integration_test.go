@@ -73,25 +73,23 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 	waitForContains(t, listener, "1.", 5*time.Second)
 
-	// Exercise large file upload (forces multiple chunks over the connection) and verify integrity.
+	// Exercise large file upload and verify integrity.
 	sharedDir := t.TempDir()
 	localLarge := filepath.Join(sharedDir, "large_local.bin")
 	remoteLarge := filepath.Join(sharedDir, "large_remote.bin")
 	downloadedLarge := filepath.Join(sharedDir, "large_download.bin")
 
-	// Normalize paths to use forward slashes for command-line transmission
 	localLargeNormalized := filepath.ToSlash(localLarge)
 	remoteLargeNormalized := filepath.ToSlash(remoteLarge)
 	downloadedLargeNormalized := filepath.ToSlash(downloadedLarge)
 
-	payload := bytes.Repeat([]byte("chunk-0123456789"), 200000) // 2,000,000 bytes
+	payload := bytes.Repeat([]byte("chunk-0123456789"), 200000)
 	if err := os.WriteFile(localLarge, payload, 0o644); err != nil {
 		t.Fatalf("write local large file: %v", err)
 	}
 
 	send(listener, fmt.Sprintf("upload 1 %s %s\n", localLargeNormalized, remoteLargeNormalized))
 	waitForContains(t, listener, "Uploaded", 15*time.Second)
-	// Give the connection time to settle after large file upload
 	time.Sleep(1 * time.Second)
 
 	remoteBytes := mustReadFile(t, remoteLarge)
@@ -101,10 +99,8 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 		t.Fatalf("uploaded file mismatch: want %d bytes (sha256 %x), got %d bytes (sha256 %x)", len(payload), want, len(remoteBytes), got)
 	}
 
-	// Download the same file back and verify integrity.
 	send(listener, fmt.Sprintf("download 1 %s %s\n", remoteLargeNormalized, downloadedLargeNormalized))
 	waitForContains(t, listener, "Downloaded", 15*time.Second)
-	// Give the connection time to settle after large file download
 	time.Sleep(1 * time.Second)
 
 	downloaded := mustReadFile(t, downloadedLarge)
@@ -114,17 +110,13 @@ func TestListenerReverseInteractiveSession(t *testing.T) {
 		t.Fatalf("downloaded file mismatch: want %d bytes (sha256 %x), got %d bytes (sha256 %x)", len(payload), want, len(downloaded), got)
 	}
 
-	// Exit the listener REPL.
 	send(listener, "exit\n")
 	waitForExit(t, listener, 5*time.Second)
 
-	// Once the listener is gone, the reverse client should report the broken session and stop.
 	waitForContains(t, reverse, "Connection failed", 10*time.Second)
 	waitForContains(t, reverse, "Max retries (1) reached. Exiting.", 10*time.Second)
 }
 
-// TestSequentialCommandOperations ensures multiple file operations can be performed
-// in sequence without issues using the listener REPL.
 func TestSequentialCommandOperations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -145,10 +137,7 @@ func TestSequentialCommandOperations(t *testing.T) {
 	t.Cleanup(reverse.stop)
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
-	// Execute multiple file operations to ensure the connection remains stable
 	sharedDir := t.TempDir()
-	
-	// Create multiple test files for upload
 	testFiles := []struct {
 		name    string
 		content string
@@ -157,8 +146,7 @@ func TestSequentialCommandOperations(t *testing.T) {
 		{"file2.txt", "Content 2"},
 		{"file3.txt", "Content 3"},
 	}
-	
-	// Create local files
+
 	localFiles := make([]string, len(testFiles))
 	remoteFiles := make([]string, len(testFiles))
 	for i, tf := range testFiles {
@@ -170,8 +158,7 @@ func TestSequentialCommandOperations(t *testing.T) {
 		localFiles[i] = filepath.ToSlash(localPath)
 		remoteFiles[i] = filepath.ToSlash(remotePath)
 	}
-	
-	// Perform a series of uploads to stress test buffering
+
 	for i, localFile := range localFiles {
 		send(listener, fmt.Sprintf("upload 1 %s %s\n", localFile, remoteFiles[i]))
 		waitForContains(t, listener, "Uploaded", 10*time.Second)
@@ -182,8 +169,6 @@ func TestSequentialCommandOperations(t *testing.T) {
 	waitForExit(t, listener, 5*time.Second)
 }
 
-// TestCommandLoadAndBuffering runs many basic CLI commands in sequence to detect buffering issues.
-// This test ensures that rapid command execution doesn't cause command corruption or buffering problems.
 func TestCommandLoadAndBuffering(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -204,13 +189,10 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 	t.Cleanup(reverse.stop)
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
-	// Connect to the client
 	send(listener, "ls\n")
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 
-	// Create multiple test files for upload
 	sharedDir := t.TempDir()
-	
 	testFiles := []struct {
 		name    string
 		content string
@@ -219,8 +201,7 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 		{"file2.txt", "Content 2"},
 		{"file3.txt", "Content 3"},
 	}
-	
-	// Create local files
+
 	localFiles := make([]string, len(testFiles))
 	remoteFiles := make([]string, len(testFiles))
 	for i, tf := range testFiles {
@@ -232,22 +213,19 @@ func TestCommandLoadAndBuffering(t *testing.T) {
 		localFiles[i] = filepath.ToSlash(localPath)
 		remoteFiles[i] = filepath.ToSlash(remotePath)
 	}
-	
-	// Perform a series of uploads to stress test buffering
+
 	for i, localFile := range localFiles {
 		send(listener, fmt.Sprintf("upload 1 %s %s\n", localFile, remoteFiles[i]))
 		waitForContains(t, listener, "Uploaded", 10*time.Second)
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	// List clients to ensure connection is still active
 	send(listener, "ls\n")
 	waitForContains(t, listener, "Connected Clients:", 5*time.Second)
 
 	send(listener, "exit\n")
 	waitForExit(t, listener, 5*time.Second)
 
-	// Once the listener is gone, the reverse client should report the broken session and stop
 	waitForContains(t, reverse, "Connection failed", 10*time.Second)
 	waitForContains(t, reverse, "Max retries (1) reached. Exiting.", 10*time.Second)
 }
@@ -402,24 +380,28 @@ func buildBinary(t *testing.T, name, pkg string) string {
 	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(out), ".exe") {
 		out += ".exe"
 	}
-	cmd := exec.Command("go", "build", "-o", out, pkg)
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("build %s failed: %v; output: %s", name, err, buf.String())
+		buildTarget := pkg
+		if strings.HasPrefix(pkg, "./") {
+			buildTarget = "golang-https-rev" + strings.TrimPrefix(pkg, ".")
+		}
+		cmd := exec.Command("go", "build", "-o", out, buildTarget)
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("build %s failed: %v; output: %s", name, err, buf.String())
+		}
+		return out
 	}
-	return out
-}
 
 func currentUser(t *testing.T) string {
-	t.Helper()
-	out, err := exec.Command("whoami").Output()
-	if err != nil {
-		t.Fatalf("whoami failed: %v", err)
+		t.Helper()
+		out, err := exec.Command("whoami").Output()
+		if err != nil {
+			t.Fatalf("whoami failed: %v", err)
+		}
+		return strings.TrimSpace(string(out))
 	}
-	return strings.TrimSpace(string(out))
-}
 
 func mustReadFile(t *testing.T, path string) []byte {
 	t.Helper()
