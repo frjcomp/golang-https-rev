@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"golang-https-rev/pkg/compression"
-	"golang-https-rev/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/compression"
+	"github.com/frjcomp/gots/pkg/protocol"
 )
 
 // Listener represents a TLS reverse shell listener server that accepts client connections,

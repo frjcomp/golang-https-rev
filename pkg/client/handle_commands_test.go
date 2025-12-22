@@ -5,7 +5,7 @@ import (
     "bytes"
     "testing"
 
-    "golang-https-rev/pkg/protocol"
+    "github.com/frjcomp/gots/pkg/protocol"
 )
 
 // mockClientLoop creates a ReverseClient with configurable reader/writer buffers

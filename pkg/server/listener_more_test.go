@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"golang-https-rev/pkg/certs"
-	"golang-https-rev/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/certs"
+	"github.com/frjcomp/gots/pkg/protocol"
 )
 
 // createTestListenerHelper creates a listener with a dynamic port (OS selects available port)

@@ -71,13 +71,13 @@ jobs:
           cp .config/binstaller-gotsl.yml /tmp/binstaller-gotsl.yml
           binst embed-checksums --config /tmp/binstaller-gotsl.yml --version "$VERSION" --mode download
           binst gen --config /tmp/binstaller-gotsl.yml --target-version "$VERSION" -o public/install-gotsl.sh
-          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='gotsl'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsl\\\"|" public/install-gotsl.sh
+          sed -i "s/BINARY_NAME='gots'/BINARY_NAME='gotsl'/g; s|BINARY_PATH=\\\"\${TMPDIR}/gots\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsl\\\"|" public/install-gotsl.sh
 
           # Reverse installer (gotsr)
           cp .config/binstaller-gotsr.yml /tmp/binstaller-gotsr.yml
           binst embed-checksums --config /tmp/binstaller-gotsr.yml --version "$VERSION" --mode download
           binst gen --config /tmp/binstaller-gotsr.yml --target-version "$VERSION" -o public/install-gotsr.sh
-          sed -i "s/BINARY_NAME='golang-https-rev'/BINARY_NAME='gotsr'/g; s|BINARY_PATH=\\\"\${TMPDIR}/golang-https-rev\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsr\\\"|" public/install-gotsr.sh
+          sed -i "s/BINARY_NAME='gots'/BINARY_NAME='gotsr'/g; s|BINARY_PATH=\\\"\${TMPDIR}/gots\\\"|BINARY_PATH=\\\"\${TMPDIR}/gotsr\\\"|" public/install-gotsr.sh
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

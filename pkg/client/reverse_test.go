@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 	
-	"golang-https-rev/pkg/certs"
-	"golang-https-rev/pkg/protocol"
-	"golang-https-rev/pkg/server"
+	"github.com/frjcomp/gots/pkg/certs"
+	"github.com/frjcomp/gots/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/server"
 )
 
 // TestReverseClientCreation tests creating a new reverse client

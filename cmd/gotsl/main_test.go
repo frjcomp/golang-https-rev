@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"golang-https-rev/pkg/compression"
+	"github.com/frjcomp/gots/pkg/compression"
 )
 
 // TestCompressDecompressRoundTrip verifies that data can be compressed to hex and decompressed back identically

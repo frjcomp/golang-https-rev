@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"golang-https-rev/pkg/compression"
-	"golang-https-rev/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/compression"
+	"github.com/frjcomp/gots/pkg/protocol"
 )
 
 // handlePingCommand handles PING requests from the server

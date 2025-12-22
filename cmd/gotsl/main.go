@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"golang-https-rev/pkg/certs"
-	"golang-https-rev/pkg/compression"
-	"golang-https-rev/pkg/protocol"
-	"golang-https-rev/pkg/server"
-	"golang-https-rev/pkg/version"
+	"github.com/frjcomp/gots/pkg/certs"
+	"github.com/frjcomp/gots/pkg/compression"
+	"github.com/frjcomp/gots/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/server"
+	"github.com/frjcomp/gots/pkg/version"
 	"golang.org/x/term"
 )
 

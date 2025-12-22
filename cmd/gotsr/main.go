@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"golang-https-rev/pkg/client"
-	"golang-https-rev/pkg/version"
+	"github.com/frjcomp/gots/pkg/client"
+	"github.com/frjcomp/gots/pkg/version"
 )
 
 func printHeader() {

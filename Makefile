@@ -16,9 +16,9 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    := $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -s -w \
-	-X golang-https-rev/pkg/version.Version=$(VERSION) \
-	-X golang-https-rev/pkg/version.Commit=$(COMMIT) \
-	-X golang-https-rev/pkg/version.Date=$(DATE)
+	-X github.com/frjcomp/gots/pkg/version.Version=$(VERSION) \
+	-X github.com/frjcomp/gots/pkg/version.Commit=$(COMMIT) \
+	-X github.com/frjcomp/gots/pkg/version.Date=$(DATE)
 
 .PHONY: all help build test fmt vet clean run-gotsl run-gotsr cover mod
 

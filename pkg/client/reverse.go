@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"golang-https-rev/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/protocol"
 )
 
 // ReverseClient represents a reverse shell client that connects to a listener

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"golang-https-rev/pkg/compression"
-	"golang-https-rev/pkg/protocol"
+	"github.com/frjcomp/gots/pkg/compression"
+	"github.com/frjcomp/gots/pkg/protocol"
 )
 
 // createMockClient creates a client with mock readers/writers for testing

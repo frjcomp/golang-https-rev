@@ -5,10 +5,10 @@ import (
     "testing"
     "time"
 
-    "golang-https-rev/pkg/client"
-    "golang-https-rev/pkg/certs"
-    "golang-https-rev/pkg/protocol"
-    "golang-https-rev/pkg/server"
+    "github.com/frjcomp/gots/pkg/client"
+    "github.com/frjcomp/gots/pkg/certs"
+    "github.com/frjcomp/gots/pkg/protocol"
+    "github.com/frjcomp/gots/pkg/server"
 )
 
 // TestClientConnect tests successful connection to listener

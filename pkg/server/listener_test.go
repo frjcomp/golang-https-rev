@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"golang-https-rev/pkg/certs"
+	"github.com/frjcomp/gots/pkg/certs"
 )
 
 // TestListenerCreation tests creating a new listener

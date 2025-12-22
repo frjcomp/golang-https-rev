@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"golang-https-rev/pkg/certs"
+	"github.com/frjcomp/gots/pkg/certs"
 )
 
 // TestPINGPauseResume tests that PING pause/resume works correctly during command-response cycles

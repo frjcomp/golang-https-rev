@@ -382,7 +382,7 @@ func buildBinary(t *testing.T, name, pkg string) string {
 	}
 		buildTarget := pkg
 		if strings.HasPrefix(pkg, "./") {
-			buildTarget = "golang-https-rev" + strings.TrimPrefix(pkg, ".")
+			buildTarget = "github.com/frjcomp/gots" + strings.TrimPrefix(pkg, ".")
 		}
 		cmd := exec.Command("go", "build", "-o", out, buildTarget)
 		var buf bytes.Buffer

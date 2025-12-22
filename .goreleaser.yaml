@@ -2,7 +2,7 @@ version: 2
 
 dist: dist
 
-project_name: golang-https-rev
+project_name: gots
 
 before:
   hooks:
@@ -23,9 +23,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X golang-https-rev/pkg/version.Version={{ .Version }}
-      - -X golang-https-rev/pkg/version.Commit={{ .Commit }}
-      - -X golang-https-rev/pkg/version.Date={{ .Date }}
+      - -X github.com/frjcomp/gots/pkg/version.Version={{ .Version }}
+      - -X github.com/frjcomp/gots/pkg/version.Commit={{ .Commit }}
+      - -X github.com/frjcomp/gots/pkg/version.Date={{ .Date }}
   - id: gotsr
     main: ./cmd/gotsr
     binary: gotsr
@@ -40,9 +40,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X golang-https-rev/pkg/version.Version={{ .Version }}
-      - -X golang-https-rev/pkg/version.Commit={{ .Commit }}
-      - -X golang-https-rev/pkg/version.Date={{ .Date }}
+      - -X github.com/frjcomp/gots/pkg/version.Version={{ .Version }}
+      - -X github.com/frjcomp/gots/pkg/version.Commit={{ .Commit }}
+      - -X github.com/frjcomp/gots/pkg/version.Date={{ .Date }}
 
 archives:
   - id: gotsl-archive
