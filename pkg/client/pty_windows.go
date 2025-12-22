@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/UserExistsError/conpty"
 )
@@ -76,13 +77,20 @@ func startPty(cmd *exec.Cmd) (*os.File, error) {
 		writePipe: w,
 	}
 
-	// Forward ConPTY output to the pipe and monitor process exit
+	// Use a channel to coordinate shutdown
+	done := make(chan struct{})
+	var closeOnce sync.Once
+
+	// Forward ConPTY output to the pipe
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := cpty.Read(buf)
 			if err != nil {
-				w.Close()
+				closeOnce.Do(func() {
+					close(done)
+					w.Close()
+				})
 				return
 			}
 			if n > 0 {
@@ -96,7 +104,10 @@ func startPty(cmd *exec.Cmd) (*os.File, error) {
 		// Wait for the process to exit (no timeout - blocks until exit)
 		cpty.Wait(context.Background())
 		// Process exited, close the write pipe to signal EOF to readers
-		w.Close()
+		closeOnce.Do(func() {
+			close(done)
+			w.Close()
+		})
 	}()
 
 	// We need to return something that satisfies *os.File interface
