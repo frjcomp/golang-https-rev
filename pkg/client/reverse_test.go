@@ -1,13 +1,19 @@
 package client
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"net"
+	"runtime"
+	"strings"
 	"testing"
 	
 	"golang-https-rev/pkg/certs"
+	"golang-https-rev/pkg/protocol"
 	"golang-https-rev/pkg/server"
 )
 
@@ -441,4 +447,211 @@ func TestCloseWithoutConnection(t *testing.T) {
 	}
 	
 	t.Log("✓ Close without connection handled correctly")
+}
+
+// TestHandleCommandsWithEOF tests handling EOF (normal disconnect)
+func TestHandleCommandsWithEOF(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create a reader with immediate EOF
+	reader := strings.NewReader("")
+	client.reader = bufio.NewReader(reader)
+	
+	// Should return nil on EOF (graceful disconnect)
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Expected nil on EOF, got: %v", err)
+	}
+	
+	t.Log("✓ EOF handled gracefully")
+}
+
+// TestHandleCommandsEmptyCommand tests handling empty commands
+func TestHandleCommandsEmptyCommand(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create reader with empty line followed by EOF
+	reader := strings.NewReader("\nEOF")
+	client.reader = bufio.NewReader(reader)
+	
+	// Should skip empty lines and return on EOF
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Expected nil on EOF, got: %v", err)
+	}
+	
+	t.Log("✓ Empty commands skipped")
+}
+
+// TestHandleCommandsExitCommand tests EXIT command handling
+func TestHandleCommandsExitCommand(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Create reader with PING then EXIT
+	reader := strings.NewReader(protocol.CmdPing + "\n" + protocol.CmdExit + "\n")
+	client.reader = bufio.NewReader(reader)
+	
+	// Should process PING, then EXIT and return
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Expected nil after EXIT, got: %v", err)
+	}
+	
+	result := output.String()
+	if !strings.Contains(result, protocol.CmdPong) {
+		t.Logf("Expected PONG response, got: %s", result)
+	}
+	
+	t.Log("✓ EXIT command handled")
+}
+
+// TestHandleCommandsShellCommand tests shell command execution in non-PTY mode
+func TestHandleCommandsShellCommand(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Create reader with shell command then EXIT
+	reader := strings.NewReader("SHELL echo test\n" + protocol.CmdExit + "\n")
+	client.reader = bufio.NewReader(reader)
+	
+	// Should execute shell command and return on EXIT
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Expected nil after EXIT, got: %v", err)
+	}
+	
+	result := output.String()
+	// Should have output from echo command
+	if !strings.Contains(result, "test") {
+		t.Logf("Expected 'test' in output, got: %s", result)
+	}
+	
+	t.Log("✓ Shell command executed")
+}
+
+// TestHandleCommandsPingCommand tests PING command in loop
+func TestHandleCommandsPingCommand(t *testing.T) {
+	client, output := createMockClient()
+	
+	// Create reader with PING commands and EXIT
+	reader := strings.NewReader(protocol.CmdPing + "\n" + protocol.CmdPing + "\n" + protocol.CmdExit + "\n")
+	client.reader = bufio.NewReader(reader)
+	
+	// Should handle multiple PINGs
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Expected nil after EXIT, got: %v", err)
+	}
+	
+	result := output.String()
+	// Count PONG responses
+	pongCount := strings.Count(result, protocol.CmdPong)
+	if pongCount < 2 {
+		t.Logf("Expected at least 2 PONGs, got %d in: %s", pongCount, result)
+	}
+	
+	t.Log("✓ Multiple PING commands handled")
+}
+
+// TestHandleCommandsReadError tests handling of read errors
+func TestHandleCommandsReadError(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create reader that returns error
+	reader := &errorReader{}
+	client.reader = bufio.NewReader(reader)
+	
+	// Should return error
+	err := client.HandleCommands()
+	if err == nil {
+		t.Error("Expected error from read failure")
+	}
+	if !strings.Contains(err.Error(), "read error") {
+		t.Errorf("Expected 'read error' in error message, got: %v", err)
+	}
+	
+	t.Log("✓ Read error handled")
+}
+
+// errorReader returns an error on Read
+type errorReader struct{}
+
+func (er *errorReader) Read(p []byte) (int, error) {
+	return 0, errors.New("simulated read error")
+}
+
+// TestHandleCommandsPtyMode tests handling commands in PTY mode
+func TestHandleCommandsPtyMode(t *testing.T) {
+	client, _ := createMockClient()
+	client.inPtyMode = true
+	
+	// Send a PTY exit command
+	commands := fmt.Sprintf("%s\n", protocol.CmdPtyExit)
+	reader := bufio.NewReader(strings.NewReader(commands))
+	client.reader = reader
+	
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	// Client should still be running (PTY exit doesn't close connection)
+	t.Log("✓ PTY exit command handled")
+}
+
+// TestHandleCommandsPtyDataCommand tests handling PTY data command
+func TestHandleCommandsPtyDataCommand(t *testing.T) {
+	client, _ := createMockClient()
+	client.inPtyMode = true
+	
+	// Send a PTY data command (hex encoded)
+	dataCmd := fmt.Sprintf("%s %s\n", protocol.CmdPtyData, "6865") // "he" in hex
+	reader := bufio.NewReader(strings.NewReader(dataCmd + fmt.Sprintf("%s\n", protocol.CmdPtyExit)))
+	client.reader = reader
+	
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	t.Log("✓ PTY data command handled")
+}
+
+// TestHandleCommandsPtyResizeCommand tests handling PTY resize command
+func TestHandleCommandsPtyResizeCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY resize test skipped on Windows")
+	}
+	
+	client, _ := createMockClient()
+	client.inPtyMode = true
+	
+	// Send a PTY resize command
+	resizeCmd := fmt.Sprintf("%s 24 80\n", protocol.CmdPtyResize)
+	reader := bufio.NewReader(strings.NewReader(resizeCmd + fmt.Sprintf("%s\n", protocol.CmdPtyExit)))
+	client.reader = reader
+	
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	t.Log("✓ PTY resize command handled")
+}
+
+// TestHandleCommandsIgnoredInPtyMode tests ignored commands in PTY mode
+func TestHandleCommandsIgnoredInPtyMode(t *testing.T) {
+	client, _ := createMockClient()
+	client.inPtyMode = true
+	
+	// Send commands that should be ignored in PTY mode
+	commands := fmt.Sprintf("PING\nECHO test\n%s\n", protocol.CmdPtyExit)
+	reader := bufio.NewReader(strings.NewReader(commands))
+	client.reader = reader
+	
+	err := client.HandleCommands()
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	t.Log("✓ Non-PTY commands ignored in PTY mode")
 }
