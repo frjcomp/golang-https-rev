@@ -396,6 +396,7 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 		stdinBuf := make([]byte, 1024)
 
 		for {
+			// Check if we should exit BEFORE reading
 			select {
 			case <-exitPty:
 				// Remote closed, stop reading stdin
@@ -428,13 +429,28 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 					return
 				}
 
+				// **CRITICAL**: Check again before sending - remote might have just closed
+				select {
+				case <-exitPty:
+					// Remote closed, don't send this data
+					return
+				default:
+					// Safe to send
+				}
+
 				// Send data immediately to PTY
 				encoded, err := compression.CompressToHex(data)
 				if err != nil {
 					fmt.Printf("\nError encoding input: %v\n", err)
 					return
 				}
-				l.SendCommand(clientAddr, protocol.CmdPtyData+" "+encoded)
+				
+				// **CRITICAL**: Verify client is still responsive before sending
+				// This prevents sending PTY_DATA after the client has exited PTY mode
+				if err := l.SendCommand(clientAddr, protocol.CmdPtyData+" "+encoded); err != nil {
+					log.Printf("Failed to send PTY data (client may have disconnected): %v", err)
+					return
+				}
 			}
 		}
 	}()
@@ -445,10 +461,13 @@ func enterPtyShell(l *server.Listener, clientAddr string) {
 	// Exit PTY mode (unless remote already closed)
 	if !remoteExited {
 		fmt.Println("\nExiting PTY shell...")
+		// Send PTY_EXIT but don't wait for response - client might have already exited
 		l.SendCommand(clientAddr, protocol.CmdPtyExit)
-		time.Sleep(100 * time.Millisecond) // Give it time to process
+		// Brief pause to let exit command be processed
+		time.Sleep(50 * time.Millisecond)
 	}
 	
+	// Exit PTY mode in listener immediately
 	l.ExitPtyMode(clientAddr)
 	
 	// Give goroutines a moment to finish
