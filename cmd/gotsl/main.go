@@ -53,7 +53,13 @@ func runListener(args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to generate certificate: %w", err)
 	}
-	log.Println("Certificate generated successfully")
+	
+	fingerprint, err := certs.GetCertificateFingerprint(cert)
+	if err != nil {
+		log.Printf("Warning: failed to get certificate fingerprint: %v", err)
+	} else {
+		log.Printf("Certificate generated successfully (SHA256: %s)", fingerprint)
+	}
 
 	log.Printf("Version: %s (commit %s, date %s)", version.Version, version.Commit, version.Date)
 

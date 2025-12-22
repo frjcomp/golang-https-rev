@@ -3,9 +3,11 @@ package certs
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -54,4 +56,14 @@ func GenerateSelfSignedCert() (tls.Certificate, error) {
 	}
 
 	return cert, nil
+}
+
+// GetCertificateFingerprint returns the SHA256 fingerprint of a certificate
+func GetCertificateFingerprint(cert tls.Certificate) (string, error) {
+	if len(cert.Certificate) == 0 {
+		return "", fmt.Errorf("certificate has no data")
+	}
+	
+	hash := sha256.Sum256(cert.Certificate[0])
+	return hex.EncodeToString(hash[:]), nil
 }

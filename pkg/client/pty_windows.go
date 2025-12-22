@@ -121,14 +121,19 @@ func startPty(cmd *exec.Cmd) (*os.File, error) {
 }
 
 var (
-	ptyWrappers = make(map[uintptr]*windowsPty)
+	ptyWrappers   = make(map[uintptr]*windowsPty)
+	ptyWrappersMu sync.Mutex
 )
 
 func storePtyWrapper(fd uintptr, wrapper *windowsPty) {
+	ptyWrappersMu.Lock()
+	defer ptyWrappersMu.Unlock()
 	ptyWrappers[fd] = wrapper
 }
 
 func getPtyWrapper(fd uintptr) *windowsPty {
+	ptyWrappersMu.Lock()
+	defer ptyWrappersMu.Unlock()
 	return ptyWrappers[fd]
 }
 
