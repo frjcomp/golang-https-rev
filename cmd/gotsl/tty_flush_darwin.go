@@ -11,6 +11,6 @@ import (
 
 func flushStdin() error {
 	fd := int(os.Stdin.Fd())
-	arg := unix.FREAD
+	arg := 1
 	return unix.IoctlSetInt(fd, unix.TIOCFLUSH, arg)
 }
