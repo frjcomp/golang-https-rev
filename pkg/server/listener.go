@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"crypto/subtle"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -106,8 +107,10 @@ func (l *Listener) handleClient(conn net.Conn) {
     	}
 
 		receivedSecret := strings.TrimPrefix(line, protocol.CmdAuth+" ")
-    	if receivedSecret != l.sharedSecret {
-    		log.Printf("WARNING: Authentication failed for %s: invalid secret", clientAddr)
+    	if subtle.ConstantTimeCompare(
+    		[]byte(receivedSecret),
+    		[]byte(l.sharedSecret),
+    	) != 1 {
     		writer.WriteString(protocol.CmdAuthFailed + "\n")
     		writer.Flush()
     		return

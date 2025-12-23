@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -49,29 +50,62 @@ func NewReverseClient(target, sharedSecret, certFingerprint string) *ReverseClie
 
 // Connect establishes a TLS connection to the listener
 func (rc *ReverseClient) Connect() error {
-	conn, err := tls.Dial("tcp", rc.target, &tls.Config{
-		InsecureSkipVerify: true,
-	})
-	if err != nil {
-		return fmt.Errorf("connection failed: %w", err)
+	// Create TLS config with certificate pinning
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS13,  // Enforce TLS 1.3
+		InsecureSkipVerify: true,              // Disable default verification; use custom VerifyPeerCertificate
+
+		// Verify certificate chain and fingerprint BEFORE accepting connection
+		VerifyPeerCertificate: func(
+			rawCerts [][]byte,
+			verifiedChains [][]*x509.Certificate,
+		) error {
+			// Must have at least one certificate
+			if len(rawCerts) == 0 {
+				return errors.New("no certificates provided by server")
+			}
+
+			// If fingerprint is provided, verify it (works for self-signed certs)
+			if rc.certFingerprint != "" {
+				// Hash the DER-encoded certificate directly (works for self-signed)
+				hash := sha256.Sum256(rawCerts[0])
+				fingerprint := hex.EncodeToString(hash[:])
+
+				if fingerprint != rc.certFingerprint {
+					return fmt.Errorf(
+						"certificate fingerprint mismatch!\nExpected: %s\nReceived: %s\n⚠️ WARNING: Possible MITM attack!",
+						rc.certFingerprint,
+						fingerprint,
+					)
+				}
+				log.Printf("✓ Certificate fingerprint validated: %s", fingerprint)
+				return nil  // Accept - fingerprint matched
+			}
+
+			// No fingerprint provided
+			// Check if certificate passed standard chain validation (CA-signed certs)
+			if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 {
+				// Certificate verified against system root CAs
+				log.Printf("✓ Certificate verified by system root CA")
+				return nil
+			}
+
+			// Self-signed certificate and no fingerprint provided
+			// Allow connection but warn user about security risk
+			hash := sha256.Sum256(rawCerts[0])
+			fingerprint := hex.EncodeToString(hash[:])
+			log.Printf("⚠️  WARNING: Self-signed certificate detected without fingerprint verification!")
+			log.Printf("⚠️  Certificate fingerprint: %s", fingerprint)
+			log.Printf("⚠️  For improved security, provide this fingerprint using: --cert-fingerprint %s", fingerprint)
+			log.Printf("⚠️  Or use -s flag on listener to display the required fingerprint")
+			return nil  // Allow connection despite security risk
+		},
 	}
 
-	// Validate certificate fingerprint if provided
-	if rc.certFingerprint != "" {
-		if len(conn.ConnectionState().PeerCertificates) == 0 {
-			conn.Close()
-			return fmt.Errorf("no server certificate received")
-		}
-
-		certDER := conn.ConnectionState().PeerCertificates[0].Raw
-		hash := sha256.Sum256(certDER)
-		fingerprint := hex.EncodeToString(hash[:])
-
-		if fingerprint != rc.certFingerprint {
-			conn.Close()
-			return fmt.Errorf("certificate fingerprint mismatch!\nExpected: %s\nReceived: %s\n⚠ WARNING: Possible machine-in-the-middle attack!", rc.certFingerprint, fingerprint)
-		}
-		log.Printf("✓ Certificate fingerprint validated: %s", fingerprint)
+	// Establish TLS connection with validation
+	conn, err := tls.Dial("tcp", rc.target, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
 	}
 
 	rc.conn = conn

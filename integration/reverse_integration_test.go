@@ -13,7 +13,7 @@ import (
 
 // TestClientConnect tests successful connection to listener
 func TestClientConnect(t *testing.T) {
-    listener := createServerForTest(t)
+    listener, fingerprint := createServerForTest(t)
     netListener, err := listener.Start()
     if err != nil {
         t.Fatalf("Failed to start listener: %v", err)
@@ -22,7 +22,7 @@ func TestClientConnect(t *testing.T) {
 
     addr := netListener.Addr().String()
 
-    c := client.NewReverseClient(addr, "", "")
+    c := client.NewReverseClient(addr, "", fingerprint)
     if c == nil {
         t.Fatal("NewReverseClient returned nil")
     }
@@ -60,7 +60,7 @@ func TestClientConnectFailure(t *testing.T) {
 
 // TestClientClose tests closing the connection
 func TestClientClose(t *testing.T) {
-    listener := createServerForTest(t)
+    listener, fingerprint := createServerForTest(t)
     netListener, err := listener.Start()
     if err != nil {
         t.Fatalf("Failed to start listener: %v", err)
@@ -69,7 +69,7 @@ func TestClientClose(t *testing.T) {
 
     addr := netListener.Addr().String()
 
-    c := client.NewReverseClient(addr, "", "")
+    c := client.NewReverseClient(addr, "", fingerprint)
     err = c.Connect()
     if err != nil {
         t.Fatalf("Failed to connect: %v", err)
@@ -93,7 +93,7 @@ func TestClientClose(t *testing.T) {
 
 // TestClientCommandReception
 func TestClientCommandReception(t *testing.T) {
-    listener := createServerForTest(t)
+    listener, fingerprint := createServerForTest(t)
     netListener, err := listener.Start()
     if err != nil {
         t.Fatalf("Failed to start listener: %v", err)
@@ -102,7 +102,7 @@ func TestClientCommandReception(t *testing.T) {
 
     addr := netListener.Addr().String()
 
-    c := client.NewReverseClient(addr, "", "")
+    c := client.NewReverseClient(addr, "", fingerprint)
     err = c.Connect()
     if err != nil {
         t.Fatalf("Failed to connect: %v", err)
@@ -118,7 +118,7 @@ func TestClientCommandReception(t *testing.T) {
 
 // TestClientUploadFlow (setup only)
 func TestClientUploadFlow(t *testing.T) {
-    listener := createServerForTest(t)
+    listener, fingerprint := createServerForTest(t)
     netListener, err := listener.Start()
     if err != nil {
         t.Fatalf("Failed to start listener: %v", err)
@@ -127,7 +127,7 @@ func TestClientUploadFlow(t *testing.T) {
 
     addr := netListener.Addr().String()
 
-    c := client.NewReverseClient(addr, "", "")
+    c := client.NewReverseClient(addr, "", fingerprint)
     err = c.Connect()
     if err != nil {
         t.Fatalf("Failed to connect: %v", err)
@@ -149,7 +149,7 @@ func TestClientUploadFlow(t *testing.T) {
 
 // TestClientExitCommand
 func TestClientExitCommand(t *testing.T) {
-    listener := createServerForTest(t)
+    listener, fingerprint := createServerForTest(t)
     netListener, err := listener.Start()
     if err != nil {
         t.Fatalf("Failed to start listener: %v", err)
@@ -158,7 +158,7 @@ func TestClientExitCommand(t *testing.T) {
 
     addr := netListener.Addr().String()
 
-    c := client.NewReverseClient(addr, "", "")
+    c := client.NewReverseClient(addr, "", fingerprint)
     err = c.Connect()
     if err != nil {
         t.Fatalf("Failed to connect: %v", err)
@@ -182,12 +182,12 @@ func TestClientExitCommand(t *testing.T) {
 }
 
 // Helper functions
-func createServerForTest(t *testing.T) *server.Listener {
-    cert, _, err := certs.GenerateSelfSignedCert()
+func createServerForTest(t *testing.T) (*server.Listener, string) {
+    cert, fingerprint, err := certs.GenerateSelfSignedCert()
     if err != nil {
         t.Fatalf("Failed to generate certificate: %v", err)
     }
 
     tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
-    return server.NewListener("0", "127.0.0.1", tlsConfig, "")
+    return server.NewListener("0", "127.0.0.1", tlsConfig, ""), fingerprint
 }
