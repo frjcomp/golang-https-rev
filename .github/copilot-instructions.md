@@ -8,3 +8,5 @@
 - Avoid generating or accepting license-incompatible code snippets; write original implementations.
 - For security-sensitive areas (auth, TLS, secrets), explain reasoning briefly in PR descriptions.
 - Do not auto-fix unrelated files; only modify what the task requires.
+- Keep comments minimal; only add comments for necessary context or non-obvious behavior.
+- Remove all unused code, functions, imports, and variables before committing.
