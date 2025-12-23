@@ -100,13 +100,14 @@ GitLab CI (`.gitlab-ci.yml`):
 
 GitLab CI (Windows runner, PowerShell):
   ```yaml
+stages: [run]
 reverse-win:
   stage: run
   tags: [saas-windows-medium-amd64]
   script:
-    - powershell -NoProfile -Command ". .\download‑and‑run‑gotsr.ps1"
+    - powershell -NoProfile -ExecutionPolicy Bypass -File ".\download-and-run-gotsr.ps1"
+ # download the script from ./examples/download‑and‑run‑gotsr.ps1 and add it to your test repository
   ```
-
 
 GitHub Actions:
   ```yaml
