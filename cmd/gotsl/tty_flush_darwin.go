@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build darwin
+// +build darwin
 
 package main
 
@@ -11,5 +11,6 @@ import (
 
 func flushStdin() error {
 	fd := int(os.Stdin.Fd())
-	return unix.IoctlSetInt(fd, unix.TCFLSH, unix.TCIFLUSH)
+	arg := unix.FREAD
+	return unix.IoctlSetInt(fd, unix.TIOCFLUSH, arg)
 }
