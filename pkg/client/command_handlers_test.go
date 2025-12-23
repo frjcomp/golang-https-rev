@@ -658,6 +658,66 @@ func TestHandleEndUploadMultipleChunks(t *testing.T) {
 	}
 }
 
+// TestHandleEndUploadLargeFileSplitChunks tests uploading a large file
+// where the compressed data is split into chunks (like real usage)
+func TestHandleEndUploadLargeFileSplitChunks(t *testing.T) {
+	client, _ := createMockClient()
+	
+	// Create temp directory
+	tmpDir := t.TempDir()
+	testFilePath := filepath.Join(tmpDir, "large_file.bin")
+	
+	// Create a large test file with random-like data (less compressible)
+	// to ensure we get multiple chunks after compression
+	largeData := make([]byte, 10*1024*1024) // 10MB
+	for i := range largeData {
+		// Use a pattern that doesn't compress well
+		largeData[i] = byte((i * 131 + i/256*17) % 256)
+	}
+	
+	// Compress the entire file once (like the listener does)
+	compressed, err := compression.CompressToHex(largeData)
+	if err != nil {
+		t.Fatalf("Failed to compress test data: %v", err)
+	}
+	
+	// Split compressed data into chunks (like the listener does)
+	chunkSize := 65536 // protocol.ChunkSize
+	var chunks []string
+	for i := 0; i < len(compressed); i += chunkSize {
+		end := i + chunkSize
+		if end > len(compressed) {
+			end = len(compressed)
+		}
+		chunks = append(chunks, compressed[i:end])
+	}
+	
+	t.Logf("Large file test: %d bytes original, %d bytes compressed, %d chunks", 
+		len(largeData), len(compressed), len(chunks))
+	
+	// Setup upload with split chunks
+	client.currentUploadPath = testFilePath
+	client.uploadChunks = chunks
+	
+	err = client.handleEndUploadCommand("END_UPLOAD " + testFilePath)
+	if err != nil {
+		t.Fatalf("Large file upload failed: %v", err)
+	}
+	
+	// Verify file was written correctly
+	written, err := os.ReadFile(testFilePath)
+	if err != nil {
+		t.Fatalf("Failed to read written file: %v", err)
+	}
+	
+	if !bytes.Equal(written, largeData) {
+		t.Errorf("Large file content mismatch: got %d bytes, expected %d bytes", 
+			len(written), len(largeData))
+	}
+	
+	t.Logf("✓ Large file upload test passed: %d chunks reassembled correctly", len(chunks))
+}
+
 // TestPtyModeReentry tests that PTY mode can be entered and exited multiple times
 // without "input/output error" or goroutine leaks
 func TestPtyModeReentry(t *testing.T) {

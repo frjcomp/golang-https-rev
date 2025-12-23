@@ -63,20 +63,22 @@ func (rc *ReverseClient) handleEndUploadCommand(command string) error {
 		return fmt.Errorf("no active upload session")
 	}
 
-	// Decompress and write chunks to file
-	decompressedData := []byte{}
+	// Concatenate all chunks into single compressed hex string, then decompress
+	var fullCompressed strings.Builder
 	for _, chunk := range rc.uploadChunks {
-		decompressed, err := compression.DecompressHex(chunk)
-		if err != nil {
-			rc.writer.WriteString(fmt.Sprintf("Decompression error: %v\n", err) + protocol.EndOfOutputMarker + "\n")
-			rc.writer.Flush()
-			return fmt.Errorf("decompression failed: %w", err)
-		}
-		decompressedData = append(decompressedData, decompressed...)
+		fullCompressed.WriteString(chunk)
+	}
+
+	// Decompress the complete compressed data
+	decompressedData, err := compression.DecompressHex(fullCompressed.String())
+	if err != nil {
+		rc.writer.WriteString(fmt.Sprintf("Decompression error: %v\n", err) + protocol.EndOfOutputMarker + "\n")
+		rc.writer.Flush()
+		return fmt.Errorf("decompression failed: %w", err)
 	}
 
 	// Write to file
-	err := os.WriteFile(rc.currentUploadPath, decompressedData, 0644)
+	err = os.WriteFile(rc.currentUploadPath, decompressedData, 0644)
 	if err != nil {
 		rc.writer.WriteString(fmt.Sprintf("Write error: %v\n", err) + protocol.EndOfOutputMarker + "\n")
 		rc.writer.Flush()
