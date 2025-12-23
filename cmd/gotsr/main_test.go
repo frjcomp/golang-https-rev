@@ -255,3 +255,26 @@ func TestConnectWithRetryHandleCommandsSuccess(t *testing.T) {
 		t.Fatalf("expected Close to be called at least once, got %d", fc.closed)
 	}
 }
+
+func TestSecretLengthValidation(t *testing.T) {
+tests := []struct {
+name    string
+secret  string
+wantErr bool
+}{
+{"empty secret", "", false},
+{"valid 64 chars", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", false},
+{"too short", "short", true},
+{"too short hex", "0123456789abcdef", true},
+{"too long", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef00", true},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+err := runClient([]string{"127.0.0.1:8443", "1"}, tt.secret, "")
+if (err != nil) != tt.wantErr {
+t.Errorf("runClient() error = %v, wantErr %v", err, tt.wantErr)
+}
+})
+}
+}
