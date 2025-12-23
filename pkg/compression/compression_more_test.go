@@ -28,7 +28,7 @@ func TestCompressionFormat(t *testing.T) {
 func TestCompressionRatio(t *testing.T) {
 	// Highly compressible data
 	input := bytes.Repeat([]byte("aaaaaaaa"), 10000)
-	
+
 	encoded, err := CompressToHex(input)
 	if err != nil {
 		t.Fatalf("CompressToHex failed: %v", err)
@@ -47,7 +47,7 @@ func TestCompressionRatio(t *testing.T) {
 // TestEmptyCompressionRoundtrip tests edge case of empty data
 func TestEmptyCompressionRoundtrip(t *testing.T) {
 	input := []byte{}
-	
+
 	encoded, err := CompressToHex(input)
 	if err != nil {
 		t.Fatalf("CompressToHex failed for empty input: %v", err)
@@ -69,7 +69,7 @@ func TestEmptyCompressionRoundtrip(t *testing.T) {
 func TestLargeDataCompression(t *testing.T) {
 	// Create 5MB of test data
 	input := bytes.Repeat([]byte("test data "), 512*1024)
-	
+
 	encoded, err := CompressToHex(input)
 	if err != nil {
 		t.Fatalf("CompressToHex failed: %v", err)

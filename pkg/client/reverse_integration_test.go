@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/frjcomp/gots/pkg/certs"
 	"github.com/frjcomp/gots/pkg/protocol"
 	"github.com/frjcomp/gots/pkg/server"
-	"github.com/frjcomp/gots/pkg/certs"
 )
 
 // TestClientConnect tests successful connection to listener
@@ -93,13 +93,13 @@ func TestClientClose(t *testing.T) {
 // TestClientExecuteCommand tests command execution with output
 func TestClientExecuteCommand(t *testing.T) {
 	client := NewReverseClient("127.0.0.1:9999", "", "")
-	
+
 	// Test echo command which works cross-platform
 	output := client.ExecuteCommand("echo test_output")
 	if output == "" {
 		t.Fatal("ExecuteCommand returned empty output")
 	}
-	
+
 	if !containsStr(output, "test_output") {
 		t.Fatalf("Expected 'test_output' in output, got: %s", output)
 	}
@@ -110,7 +110,7 @@ func TestClientExecuteCommand(t *testing.T) {
 // TestClientExecuteCommandError tests command execution with error
 func TestClientExecuteCommandError(t *testing.T) {
 	client := NewReverseClient("127.0.0.1:9999", "", "")
-	
+
 	// Execute a command that will fail
 	output := client.ExecuteCommand("false 2>&1 || true")
 	if output == "" {
@@ -141,7 +141,7 @@ func TestClientCommandReception(t *testing.T) {
 
 	// Give listener time to register client
 	time.Sleep(100 * time.Millisecond)
-	
+
 	clients := listener.GetClients()
 	if len(clients) != 1 {
 		t.Fatalf("Expected 1 connected client, got %d", len(clients))
@@ -171,7 +171,7 @@ func TestClientUploadFlow(t *testing.T) {
 
 	// Verify connection is established
 	time.Sleep(100 * time.Millisecond)
-	
+
 	clients := listener.GetClients()
 	if len(clients) != 1 {
 		t.Fatalf("Expected 1 connected client, got %d", len(clients))

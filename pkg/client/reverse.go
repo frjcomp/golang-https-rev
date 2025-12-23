@@ -24,8 +24,8 @@ import (
 // and handles command execution and file transfers.
 type ReverseClient struct {
 	target            string
-	sharedSecret      string     // Optional shared secret for authentication
-	certFingerprint   string     // Optional expected certificate fingerprint
+	sharedSecret      string // Optional shared secret for authentication
+	certFingerprint   string // Optional expected certificate fingerprint
 	conn              *tls.Conn
 	reader            *bufio.Reader
 	writer            *bufio.Writer
@@ -52,8 +52,8 @@ func NewReverseClient(target, sharedSecret, certFingerprint string) *ReverseClie
 func (rc *ReverseClient) Connect() error {
 	// Create TLS config with certificate pinning
 	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS13,  // Enforce TLS 1.3
-		InsecureSkipVerify: true,              // Disable default verification; use custom VerifyPeerCertificate
+		MinVersion:         tls.VersionTLS13, // Enforce TLS 1.3
+		InsecureSkipVerify: true,             // Disable default verification; use custom VerifyPeerCertificate
 
 		// Verify certificate chain and fingerprint BEFORE accepting connection
 		VerifyPeerCertificate: func(
@@ -79,7 +79,7 @@ func (rc *ReverseClient) Connect() error {
 					)
 				}
 				log.Printf("✓ Certificate fingerprint validated: %s", fingerprint)
-				return nil  // Accept - fingerprint matched
+				return nil // Accept - fingerprint matched
 			}
 
 			// No fingerprint provided
@@ -96,7 +96,7 @@ func (rc *ReverseClient) Connect() error {
 			fingerprint := hex.EncodeToString(hash[:])
 			log.Printf("⚠️  WARNING: Self-signed certificate detected without fingerprint verification!")
 			log.Printf("⚠️  Certificate fingerprint: %s", fingerprint)
-			return nil  // Allow connection despite security risk
+			return nil // Allow connection despite security risk
 		},
 	}
 

@@ -13,7 +13,7 @@ func TestGenerateSelfSignedCertInvalidKeySize(t *testing.T) {
 
 	// Use a small buffer to simulate key generation failure
 	rand.Reader = &limitedReader{remaining: 10}
-	
+
 	_, _, err := GenerateSelfSignedCert()
 	if err == nil {
 		t.Fatal("expected error with insufficient random data")

@@ -64,24 +64,25 @@ func TestMultipleCertificates(t *testing.T) {
 
 	t.Log("✓ Multiple unique certificates can be generated")
 }
+
 // TestGenerateSecret tests shared secret generation
 func TestGenerateSecret(t *testing.T) {
 	secret, err := GenerateSecret()
 	if err != nil {
 		t.Fatalf("Failed to generate secret: %v", err)
 	}
-	
+
 	// Should be 64 hex characters (32 bytes encoded as hex)
 	if len(secret) != 64 {
 		t.Errorf("Expected 64 character hex string, got %d characters", len(secret))
 	}
-	
+
 	// Should be valid hex
 	_, err = hex.DecodeString(secret)
 	if err != nil {
 		t.Errorf("Secret is not valid hex: %v", err)
 	}
-	
+
 	t.Log("✓ Secret generation successful")
 }
 
@@ -91,16 +92,16 @@ func TestGenerateSecretUniqueness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate first secret: %v", err)
 	}
-	
+
 	secret2, err := GenerateSecret()
 	if err != nil {
 		t.Fatalf("Failed to generate second secret: %v", err)
 	}
-	
+
 	if secret1 == secret2 {
 		t.Error("Two generated secrets are identical, should be random")
 	}
-	
+
 	t.Log("✓ Secrets are unique")
 }
 
@@ -113,13 +114,13 @@ func TestGenerateSecretRandomness(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to generate secret %d: %v", i, err)
 		}
-		
+
 		if secrets[secret] {
 			t.Errorf("Duplicate secret generated: %s", secret)
 		}
 		secrets[secret] = true
 	}
-	
+
 	t.Log("✓ Secrets show good randomness")
 }
 
@@ -129,23 +130,23 @@ func TestGetCertificateFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate certificate: %v", err)
 	}
-	
+
 	fingerprint, err := GetCertificateFingerprint(cert)
 	if err != nil {
 		t.Fatalf("Failed to get fingerprint: %v", err)
 	}
-	
+
 	// Should be 64 hex characters (SHA256)
 	if len(fingerprint) != 64 {
 		t.Errorf("Expected 64 character fingerprint, got %d", len(fingerprint))
 	}
-	
+
 	// Should be valid hex
 	_, err = hex.DecodeString(fingerprint)
 	if err != nil {
 		t.Errorf("Fingerprint is not valid hex: %v", err)
 	}
-	
+
 	t.Log("✓ Certificate fingerprint calculated successfully")
 }
 
@@ -155,21 +156,21 @@ func TestGetCertificateFingerprintConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate certificate: %v", err)
 	}
-	
+
 	fingerprint1, err := GetCertificateFingerprint(cert)
 	if err != nil {
 		t.Fatalf("Failed to get first fingerprint: %v", err)
 	}
-	
+
 	fingerprint2, err := GetCertificateFingerprint(cert)
 	if err != nil {
 		t.Fatalf("Failed to get second fingerprint: %v", err)
 	}
-	
+
 	if fingerprint1 != fingerprint2 {
 		t.Error("Fingerprints should be identical for the same certificate")
 	}
-	
+
 	t.Log("✓ Certificate fingerprint is consistent")
 }
 
@@ -179,17 +180,17 @@ func TestGetCertificateFingerprintMatchesGeneratedFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate certificate: %v", err)
 	}
-	
+
 	calculatedFingerprint, err := GetCertificateFingerprint(cert)
 	if err != nil {
 		t.Fatalf("Failed to calculate fingerprint: %v", err)
 	}
-	
+
 	if generatedFingerprint != calculatedFingerprint {
-		t.Errorf("Fingerprints don't match:\nGenerated: %s\nCalculated: %s", 
+		t.Errorf("Fingerprints don't match:\nGenerated: %s\nCalculated: %s",
 			generatedFingerprint, calculatedFingerprint)
 	}
-	
+
 	t.Log("✓ Fingerprints match between generation methods")
 }
 
@@ -199,25 +200,25 @@ func TestDifferentCertsDifferentFingerprints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate first certificate: %v", err)
 	}
-	
+
 	time.Sleep(10 * time.Millisecond) // Ensure different serial number
-	
+
 	cert2, fingerprint2, err := GenerateSelfSignedCert()
 	if err != nil {
 		t.Fatalf("Failed to generate second certificate: %v", err)
 	}
-	
+
 	if fingerprint1 == fingerprint2 {
 		t.Error("Different certificates should have different fingerprints")
 	}
-	
+
 	// Double check with GetCertificateFingerprint
 	fp1, _ := GetCertificateFingerprint(cert1)
 	fp2, _ := GetCertificateFingerprint(cert2)
-	
+
 	if fp1 == fp2 {
 		t.Error("Different certificates should have different fingerprints (via GetCertificateFingerprint)")
 	}
-	
+
 	t.Log("✓ Different certificates have different fingerprints")
 }

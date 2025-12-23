@@ -16,7 +16,7 @@ import (
 
 // windowsPty wraps ConPTY to provide *os.File-like interface
 type windowsPty struct {
-	cpty  *conpty.ConPty
+	cpty      *conpty.ConPty
 	readPipe  *os.File
 	writePipe *os.File
 }
@@ -91,7 +91,7 @@ func startPty(cmd *exec.Cmd) (*os.File, error) {
 				return
 			default:
 			}
-			
+
 			n, err := cpty.Read(buf)
 			if err != nil {
 				closeOnce.Do(func() {
@@ -126,7 +126,7 @@ func startPty(cmd *exec.Cmd) (*os.File, error) {
 	// We need to return something that satisfies *os.File interface
 	// but also can intercept Write() calls. This is tricky because
 	// Go doesn't allow us to return a custom type as *os.File.
-	// 
+	//
 	// Solution: Store the wrapper in a package-level map keyed by Fd()
 	storePtyWrapper(r.Fd(), wrapper)
 

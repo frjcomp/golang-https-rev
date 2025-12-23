@@ -137,13 +137,13 @@ func TestGetClientByIDNonNumericID(t *testing.T) {
 }
 
 type mockListener struct {
-	clients       []string
-	sentCommands  []string
-	responses     []string
-	responseIdx   int
-	sendErr       error
-	sendErrs      []error // Multiple send errors for different calls
-	getErr        error
+	clients      []string
+	sentCommands []string
+	responses    []string
+	responseIdx  int
+	sendErr      error
+	sendErrs     []error // Multiple send errors for different calls
+	getErr       error
 }
 
 func (m *mockListener) GetClients() []string {

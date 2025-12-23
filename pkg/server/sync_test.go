@@ -114,8 +114,6 @@ func TestConcurrentCommandsDoNotRaceWithPING(t *testing.T) {
 	t.Log("✓ Concurrent commands test passed")
 }
 
-
-
 // TestRapidCommandSequence tests edge case of rapid commands
 func TestRapidCommandSequence(t *testing.T) {
 	l := createTestListener(t, 0) // Port 0 = OS selects available port

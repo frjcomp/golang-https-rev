@@ -175,11 +175,11 @@ func (rc *ReverseClient) handlePtyModeCommand() error {
 			rc.ptyMutex.Lock()
 			stillActive := rc.inPtyMode && rc.ptyFile == currentPtyFile
 			rc.ptyMutex.Unlock()
-			
+
 			if !stillActive {
 				break
 			}
-			
+
 			n, err := reader.Read(buf)
 			if err != nil {
 				if err != io.EOF {
@@ -192,7 +192,7 @@ func (rc *ReverseClient) handlePtyModeCommand() error {
 				rc.ptyMutex.Lock()
 				stillActive := rc.inPtyMode && rc.ptyFile == currentPtyFile
 				rc.ptyMutex.Unlock()
-				
+
 				if !stillActive {
 					break
 				}
@@ -206,12 +206,12 @@ func (rc *ReverseClient) handlePtyModeCommand() error {
 				rc.writer.Flush()
 			}
 		}
-		
+
 		// Wait for the shell process to exit
 		if currentPtyCmd.Process != nil {
 			currentPtyCmd.Wait()
 		}
-		
+
 		// PTY closed, exit PTY mode with proper synchronization
 		rc.ptyMutex.Lock()
 		// Only clean up if we're still in the same PTY session
@@ -224,7 +224,7 @@ func (rc *ReverseClient) handlePtyModeCommand() error {
 			rc.ptyFile = nil
 			rc.ptyCmd = nil
 			rc.ptyMutex.Unlock()
-			
+
 			rc.writer.WriteString(protocol.CmdPtyExit + "\n")
 			rc.writer.Flush()
 		} else {
@@ -241,7 +241,7 @@ func (rc *ReverseClient) handlePtyDataCommand(command string) error {
 	ptyActive := rc.inPtyMode && rc.ptyFile != nil
 	ptyFile := rc.ptyFile
 	rc.ptyMutex.Unlock()
-	
+
 	if !ptyActive {
 		return fmt.Errorf("not in PTY mode")
 	}
@@ -252,7 +252,7 @@ func (rc *ReverseClient) handlePtyDataCommand(command string) error {
 	if err != nil {
 		return fmt.Errorf("failed to decompress PTY data: %v", err)
 	}
-	
+
 	// Check for Ctrl-D (0x04) on Windows and translate to 'exit\r\n'
 	// Windows cmd.exe doesn't recognize Ctrl-D as EOF, so we send 'exit' instead
 	if runtime.GOOS == "windows" && len(data) > 0 {
@@ -270,7 +270,7 @@ func (rc *ReverseClient) handlePtyDataCommand(command string) error {
 			}
 		}
 	}
-	
+
 	// Use platform-specific wrapper for writing
 	wrapper := wrapPtyFile(ptyFile)
 	_, err = wrapper.Write(data)
@@ -283,7 +283,7 @@ func (rc *ReverseClient) handlePtyResizeCommand(command string) error {
 	ptyActive := rc.inPtyMode && rc.ptyFile != nil
 	ptyFile := rc.ptyFile
 	rc.ptyMutex.Unlock()
-	
+
 	if !ptyActive {
 		return fmt.Errorf("not in PTY mode")
 	}
@@ -315,7 +315,7 @@ func (rc *ReverseClient) handlePtyResizeCommand(command string) error {
 func (rc *ReverseClient) handlePtyExitCommand() error {
 	rc.ptyMutex.Lock()
 	defer rc.ptyMutex.Unlock()
-	
+
 	if !rc.inPtyMode {
 		return nil
 	}

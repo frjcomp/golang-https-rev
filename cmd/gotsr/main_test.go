@@ -55,13 +55,13 @@ func TestRunClientValidArgs(t *testing.T) {
 	// Test with valid arguments (but will try to connect)
 	// This covers the argument parsing logic
 	args := []string{"127.0.0.1:8443", "1"}
-	
+
 	// Can't actually run it without a real server, but we can test arg parsing
 	done := make(chan error, 1)
 	go func() {
 		done <- runClient(args, "", "")
 	}()
-	
+
 	select {
 	case <-done:
 		// ok - either connected or failed after retries
@@ -197,7 +197,7 @@ func TestConnectWithRetryBackoffMaximum(t *testing.T) {
 		errors.New("fail4"),
 		errors.New("fail5"),
 	}}
-	
+
 	created := 0
 	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
@@ -228,7 +228,7 @@ func TestConnectWithRetryHandleCommandsSuccess(t *testing.T) {
 		connectErrs: []error{nil, nil},
 		handleErrs:  []error{errors.New("disconnect"), errors.New("disconnect")},
 	}
-	
+
 	created := 0
 	factory := func(target, secret, fingerprint string) reverseClient {
 		created++
@@ -257,24 +257,24 @@ func TestConnectWithRetryHandleCommandsSuccess(t *testing.T) {
 }
 
 func TestSecretLengthValidation(t *testing.T) {
-tests := []struct {
-name    string
-secret  string
-wantErr bool
-}{
-{"empty secret", "", false},
-{"valid 64 chars", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", false},
-{"too short", "short", true},
-{"too short hex", "0123456789abcdef", true},
-{"too long", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef00", true},
-}
+	tests := []struct {
+		name    string
+		secret  string
+		wantErr bool
+	}{
+		{"empty secret", "", false},
+		{"valid 64 chars", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", false},
+		{"too short", "short", true},
+		{"too short hex", "0123456789abcdef", true},
+		{"too long", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef00", true},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-err := runClient([]string{"127.0.0.1:8443", "1"}, tt.secret, "")
-if (err != nil) != tt.wantErr {
-t.Errorf("runClient() error = %v, wantErr %v", err, tt.wantErr)
-}
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runClient([]string{"127.0.0.1:8443", "1"}, tt.secret, "")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("runClient() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

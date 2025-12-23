@@ -98,25 +98,25 @@ func TestEnterPtyMode(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	// Add a mock client
 	clientAddr := "127.0.0.1:5000"
 	listener.clientConnections[clientAddr] = make(chan string)
-	
+
 	// Test entering PTY mode
 	ptyDataChan, err := listener.EnterPtyMode(clientAddr)
 	if err != nil {
 		t.Fatalf("Failed to enter PTY mode: %v", err)
 	}
-	
+
 	if ptyDataChan == nil {
 		t.Fatal("PTY data channel should not be nil")
 	}
-	
+
 	if !listener.IsInPtyMode(clientAddr) {
 		t.Error("Client should be in PTY mode")
 	}
-	
+
 	t.Log("✓ Enter PTY mode successful")
 }
 
@@ -129,12 +129,12 @@ func TestEnterPtyModeNonExistentClient(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	_, err := listener.EnterPtyMode("127.0.0.1:9999")
 	if err == nil {
 		t.Fatal("Expected error for non-existent client")
 	}
-	
+
 	t.Log("✓ Non-existent client rejected")
 }
 
@@ -147,22 +147,22 @@ func TestEnterPtyModeAlreadyInPtyMode(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:5001"
 	listener.clientConnections[clientAddr] = make(chan string)
-	
+
 	// Enter PTY mode first time
 	_, err := listener.EnterPtyMode(clientAddr)
 	if err != nil {
 		t.Fatalf("First entry failed: %v", err)
 	}
-	
+
 	// Try entering again
 	_, err = listener.EnterPtyMode(clientAddr)
 	if err == nil {
 		t.Fatal("Expected error when already in PTY mode")
 	}
-	
+
 	t.Log("✓ Duplicate PTY mode entry rejected")
 }
 
@@ -175,26 +175,26 @@ func TestExitPtyMode(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:5002"
 	listener.clientConnections[clientAddr] = make(chan string)
-	
+
 	// Enter PTY mode
 	_, err := listener.EnterPtyMode(clientAddr)
 	if err != nil {
 		t.Fatalf("Failed to enter PTY mode: %v", err)
 	}
-	
+
 	// Exit PTY mode
 	err = listener.ExitPtyMode(clientAddr)
 	if err != nil {
 		t.Errorf("Failed to exit PTY mode: %v", err)
 	}
-	
+
 	if listener.IsInPtyMode(clientAddr) {
 		t.Error("Client should not be in PTY mode after exit")
 	}
-	
+
 	t.Log("✓ Exit PTY mode successful")
 }
 
@@ -207,15 +207,15 @@ func TestExitPtyModeNotInPtyMode(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:5003"
-	
+
 	// Try exiting without entering
 	err := listener.ExitPtyMode(clientAddr)
 	if err != nil {
 		t.Errorf("Exit without PTY mode should not error, got: %v", err)
 	}
-	
+
 	t.Log("✓ Exit without PTY mode handled gracefully")
 }
 
@@ -228,23 +228,23 @@ func TestIsInPtyMode(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:5004"
 	listener.clientConnections[clientAddr] = make(chan string)
-	
+
 	// Should not be in PTY mode initially
 	if listener.IsInPtyMode(clientAddr) {
 		t.Error("Client should not be in PTY mode initially")
 	}
-	
+
 	// Enter PTY mode
 	listener.EnterPtyMode(clientAddr)
-	
+
 	// Should be in PTY mode now
 	if !listener.IsInPtyMode(clientAddr) {
 		t.Error("Client should be in PTY mode")
 	}
-	
+
 	t.Log("✓ IsInPtyMode works correctly")
 }
 
@@ -257,19 +257,19 @@ func TestGetPtyDataChan(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:5005"
 	listener.clientConnections[clientAddr] = make(chan string)
-	
+
 	// Should not exist initially
 	_, exists := listener.GetPtyDataChan(clientAddr)
 	if exists {
 		t.Error("PTY data channel should not exist initially")
 	}
-	
+
 	// Enter PTY mode
 	listener.EnterPtyMode(clientAddr)
-	
+
 	// Should exist now
 	ch, exists := listener.GetPtyDataChan(clientAddr)
 	if !exists {
@@ -278,7 +278,7 @@ func TestGetPtyDataChan(t *testing.T) {
 	if ch == nil {
 		t.Error("PTY data channel should not be nil")
 	}
-	
+
 	t.Log("✓ GetPtyDataChan works correctly")
 }
 
@@ -440,7 +440,7 @@ func TestHandleClientReadResponseFailure(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	// Verify listener can handle connection errors gracefully
 	if listener == nil {
 		t.Fatal("Listener should not be nil")
@@ -458,7 +458,7 @@ func TestHandleClientPingAndResponse(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	// Simulate a client
 	clientAddr := "127.0.0.1:50000"
 	listener.clientConnections[clientAddr] = make(chan string, 10)
@@ -485,9 +485,9 @@ func TestHandleClientPtyDataResponse(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "")
-	
+
 	clientAddr := "127.0.0.1:50001"
-	
+
 	// Create PTY data channel
 	ptyDataChan := make(chan []byte, 10)
 	listener.clientPtyData[clientAddr] = ptyDataChan
@@ -520,7 +520,7 @@ func TestHandleClientAuthenticationSuccess(t *testing.T) {
 	}
 
 	listener := NewListener("0", "127.0.0.1", tlsConfig, "secret123")
-	
+
 	// Verify the shared secret is set
 	if listener.sharedSecret != "secret123" {
 		t.Errorf("Expected secret 'secret123', got '%s'", listener.sharedSecret)

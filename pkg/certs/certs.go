@@ -71,7 +71,7 @@ func GetCertificateFingerprint(cert tls.Certificate) (string, error) {
 	if len(cert.Certificate) == 0 {
 		return "", fmt.Errorf("certificate has no data")
 	}
-	
+
 	hash := sha256.Sum256(cert.Certificate[0])
 	return hex.EncodeToString(hash[:]), nil
 }

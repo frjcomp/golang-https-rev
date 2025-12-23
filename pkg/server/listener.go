@@ -24,11 +24,11 @@ type Listener struct {
 	port              string
 	networkInterface  string
 	tlsConfig         *tls.Config
-	sharedSecret      string           // Optional shared secret for authentication
+	sharedSecret      string // Optional shared secret for authentication
 	clientConnections map[string]chan string
 	clientResponses   map[string]chan string
 	clientPausePing   map[string]chan bool
-	clientPtyMode     map[string]bool      // Track if client is in PTY mode
+	clientPtyMode     map[string]bool        // Track if client is in PTY mode
 	clientPtyData     map[string]chan []byte // PTY data channels
 	mutex             sync.Mutex
 }
@@ -92,29 +92,29 @@ func (l *Listener) handleClient(conn net.Conn) {
 	// Perform authentication if shared secret is configured
 	if l.sharedSecret != "" {
 		// Wait for AUTH command
-    	line, err := reader.ReadString('\n')
-    	if err != nil {
-    		log.Printf("WARNING: Authentication failed for %s: failed to read auth: %v", clientAddr, err)
-    		return
-    	}
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("WARNING: Authentication failed for %s: failed to read auth: %v", clientAddr, err)
+			return
+		}
 
 		line = strings.TrimSpace(line)
-    	if !strings.HasPrefix(line, protocol.CmdAuth+" ") {
-    		log.Printf("WARNING: Authentication failed for %s: expected AUTH command", clientAddr)
-    		writer.WriteString(protocol.CmdAuthFailed + "\n")
-    		writer.Flush()
-    		return
-    	}
+		if !strings.HasPrefix(line, protocol.CmdAuth+" ") {
+			log.Printf("WARNING: Authentication failed for %s: expected AUTH command", clientAddr)
+			writer.WriteString(protocol.CmdAuthFailed + "\n")
+			writer.Flush()
+			return
+		}
 
 		receivedSecret := strings.TrimPrefix(line, protocol.CmdAuth+" ")
-    	if subtle.ConstantTimeCompare(
-    		[]byte(receivedSecret),
-    		[]byte(l.sharedSecret),
-    	) != 1 {
-    		writer.WriteString(protocol.CmdAuthFailed + "\n")
-    		writer.Flush()
-    		return
-    	}
+		if subtle.ConstantTimeCompare(
+			[]byte(receivedSecret),
+			[]byte(l.sharedSecret),
+		) != 1 {
+			writer.WriteString(protocol.CmdAuthFailed + "\n")
+			writer.Flush()
+			return
+		}
 
 		// Authentication successful
 		writer.WriteString(protocol.CmdAuthOk + "\n")
@@ -185,7 +185,7 @@ func (l *Listener) handleClient(conn net.Conn) {
 			if strings.HasPrefix(currentLine, protocol.CmdPtyData+" ") {
 				encoded := strings.TrimPrefix(currentLine, protocol.CmdPtyData+" ")
 				encoded = strings.TrimSuffix(encoded, "\n")
-				
+
 				// Decompress hex PTY data
 				data, err := compression.DecompressHex(encoded)
 				if err != nil {
@@ -193,11 +193,11 @@ func (l *Listener) handleClient(conn net.Conn) {
 					responseBuffer.Reset()
 					continue
 				}
-				
+
 				l.mutex.Lock()
 				ptyDataChan, exists := l.clientPtyData[clientAddr]
 				l.mutex.Unlock()
-				
+
 				if exists {
 					select {
 					case ptyDataChan <- data:
