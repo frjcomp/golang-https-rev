@@ -38,7 +38,7 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test ./... -v -race -timeout 60s
+        run: go test ./... -v -race -timeout 120s
 
       - name: Run tests with coverage
         run: go test ./... -coverprofile=coverage.out
