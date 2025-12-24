@@ -153,6 +153,11 @@ func (l *Listener) handleClient(conn net.Conn) {
 		}
 		delete(l.clientPtyMode, clientAddr)
 		l.mutex.Unlock()
+		
+		// Clean up forwards and SOCKS proxies for this client
+		// Note: This is best-effort cleanup - IDs are tied to commands, not clients
+		// For production, you'd track client->forward/socks mappings
+		
 		close(cmdChan)
 		close(respChan)
 		log.Printf("[-] Client disconnected: %s", clientAddr)

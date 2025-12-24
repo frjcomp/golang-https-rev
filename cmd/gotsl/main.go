@@ -195,6 +195,16 @@ func interactiveShell(l server.ListenerInterface) {
 				continue
 			}
 			handleSocks(l, clientAddr, parts[2])
+		case "stop":
+			if len(parts) < 2 {
+				fmt.Println("Usage: stop forward <id> | stop socks <id>")
+				continue
+			}
+			if len(parts) != 3 {
+				fmt.Println("Usage: stop forward <id> | stop socks <id>")
+				continue
+			}
+			handleStop(l, parts[1], parts[2])
 		case "exit":
 			return
 		default:
@@ -212,6 +222,8 @@ func printHelp() {
 	fmt.Println("  forward <id> <local_port> <remote_addr> - Forward local port to remote address through client")
 	fmt.Println("  forwards                    - List active port forwards")
 	fmt.Println("  socks <id> <local_port>     - Start SOCKS5 proxy on local port through client")
+	fmt.Println("  stop forward <id>           - Stop a port forward by ID")
+	fmt.Println("  stop socks <id>             - Stop a SOCKS5 proxy by ID")
 	fmt.Println("  exit                        - Exit the listener")
 	fmt.Println()
 	fmt.Println("In PTY shell mode:")
@@ -636,5 +648,30 @@ func handleSocks(l server.ListenerInterface, clientAddr, localPort string) {
 		fmt.Printf("  Configure your browser/app to use SOCKS5 proxy at 127.0.0.1:%s\n", localPort)
 	} else {
 		fmt.Println("Error: could not access SOCKS manager")
+	}
+}
+
+func handleStop(l server.ListenerInterface, stopType, id string) {
+	if listener, ok := l.(*server.Listener); ok {
+		switch stopType {
+		case "forward":
+			err := listener.GetForwardManager().StopForward(id)
+			if err != nil {
+				fmt.Printf("Failed to stop forward: %v\n", err)
+			} else {
+				fmt.Printf("✓ Stopped port forward %s\n", id)
+			}
+		case "socks":
+			err := listener.GetSocksManager().StopSocks(id)
+			if err != nil {
+				fmt.Printf("Failed to stop SOCKS proxy: %v\n", err)
+			} else {
+				fmt.Printf("✓ Stopped SOCKS proxy %s\n", id)
+			}
+		default:
+			fmt.Printf("Unknown stop type: %s (use 'forward' or 'socks')\n", stopType)
+		}
+	} else {
+		fmt.Println("Error: could not access managers")
 	}
 }
