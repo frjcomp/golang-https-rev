@@ -205,6 +205,18 @@ func (l *Listener) handleClient(conn net.Conn) {
 				continue
 			}
 
+			// Check for SOCKS connection ready signal
+			if strings.HasPrefix(currentLine, protocol.CmdSocksOk+" ") {
+				parts := strings.Fields(strings.TrimSpace(currentLine))
+				if len(parts) == 3 {
+					socksID := parts[1]
+					connID := parts[2]
+					l.socksManager.SignalSocksReady(socksID, connID)
+				}
+				responseBuffer.Reset()
+				continue
+			}
+
 			// Check for PTY data
 			if strings.HasPrefix(currentLine, protocol.CmdPtyData+" ") {
 				encoded := strings.TrimPrefix(currentLine, protocol.CmdPtyData+" ")

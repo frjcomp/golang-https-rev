@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/frjcomp/gots/pkg/protocol"
 )
@@ -41,6 +42,7 @@ type SocksProxy struct {
 	Listener    net.Listener
 	Active      bool
 	connections map[string]net.Conn // connID -> connection
+	connReady   map[string]chan bool // connID -> ready signal
 	connCount   int
 	mu          sync.Mutex
 	sendFunc    func(string)
@@ -79,6 +81,7 @@ func (sm *SocksManager) StartSocks(id, localPort string, sendFunc func(string)) 
 		Listener:    listener,
 		Active:      true,
 		connections: make(map[string]net.Conn),
+		connReady:   make(map[string]chan bool),
 		sendFunc:    sendFunc,
 	}
 
@@ -219,6 +222,12 @@ func (sm *SocksManager) handleSocksConnection(proxy *SocksProxy, connID string, 
 
 	log.Printf("[+] SOCKS %s conn %s: connecting to %s", proxy.ID, connID, targetAddr)
 
+	// Create a ready signal for this connection
+	readyChan := make(chan bool, 1)
+	proxy.mu.Lock()
+	proxy.connReady[connID] = readyChan
+	proxy.mu.Unlock()
+
 	// Send connection request to client
 	proxy.sendFunc(fmt.Sprintf("%s %s %s %s\n", protocol.CmdSocksConn, proxy.ID, connID, targetAddr))
 
@@ -228,6 +237,21 @@ func (sm *SocksManager) handleSocksConnection(proxy *SocksProxy, connID string, 
 	_, err = conn.Write(response)
 	if err != nil {
 		log.Printf("[-] SOCKS %s conn %s: failed to send success response", proxy.ID, connID)
+		proxy.mu.Lock()
+		delete(proxy.connReady, connID)
+		proxy.mu.Unlock()
+		return
+	}
+
+	// Wait for client to establish remote connection (with timeout)
+	select {
+	case <-readyChan:
+		log.Printf("[+] SOCKS %s conn %s: remote connection established", proxy.ID, connID)
+	case <-time.After(5 * time.Second):
+		log.Printf("[-] SOCKS %s conn %s: timeout waiting for remote connection", proxy.ID, connID)
+		proxy.mu.Lock()
+		delete(proxy.connReady, connID)
+		proxy.mu.Unlock()
 		return
 	}
 
@@ -253,6 +277,27 @@ func (sm *SocksManager) relayData(proxy *SocksProxy, connID string, conn net.Con
 			proxy.sendFunc(fmt.Sprintf("%s %s %s %s\n", protocol.CmdSocksData, proxy.ID, connID, encoded))
 		}
 	}
+}
+
+// SignalSocksReady signals that a remote connection is established
+func (sm *SocksManager) SignalSocksReady(socksID, connID string) {
+	sm.mu.RLock()
+	proxy, exists := sm.proxies[socksID]
+	sm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	proxy.mu.Lock()
+	if readyChan, exists := proxy.connReady[connID]; exists {
+		select {
+		case readyChan <- true:
+		default:
+		}
+		delete(proxy.connReady, connID)
+	}
+	proxy.mu.Unlock()
 }
 
 // HandleSocksData handles incoming data from the remote side

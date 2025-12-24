@@ -59,6 +59,9 @@ func (sh *SocksHandler) HandleSocksConn(socksID, connID, targetAddr string) erro
 	sh.connections[socksID][connID] = conn
 	log.Printf("[+] SOCKS %s conn %s: connected to %s", socksID, connID, targetAddr)
 
+	// Signal server that connection is ready
+	sh.sendFunc(fmt.Sprintf("%s %s %s\n", protocol.CmdSocksOk, socksID, connID))
+
 	// Start reading from target and sending back
 	go sh.readFromTarget(socksID, connID, conn)
 

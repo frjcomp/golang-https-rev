@@ -41,6 +41,7 @@ const (
 	// SOCKS5 Proxy Commands
 	CmdSocksStart = "SOCKS_START" // Start SOCKS5 proxy: SOCKS_START <socks_id>
 	CmdSocksConn  = "SOCKS_CONN"  // SOCKS connection: SOCKS_CONN <socks_id> <conn_id> <target_host>:<target_port>
+	CmdSocksOk    = "SOCKS_OK"    // Connection established: SOCKS_OK <socks_id> <conn_id>
 	CmdSocksData  = "SOCKS_DATA"  // SOCKS data: SOCKS_DATA <socks_id> <conn_id> <base64_data>
 	CmdSocksClose = "SOCKS_CLOSE" // Close SOCKS connection: SOCKS_CLOSE <socks_id> <conn_id>
 
