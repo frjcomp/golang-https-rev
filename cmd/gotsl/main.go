@@ -163,6 +163,23 @@ func interactiveShell(l server.ListenerInterface) {
 				continue
 			}
 			handleDownloadGlobal(l, clientAddr, parts[2], parts[3])
+		case "forward":
+			if len(parts) < 2 {
+				fmt.Println("Usage: forward <client_id> <local_port> <remote_addr>")
+				fmt.Println("Example: forward 1 8080 10.0.0.5:80")
+				continue
+			}
+			if len(parts) != 4 {
+				fmt.Println("Usage: forward <client_id> <local_port> <remote_addr>")
+				continue
+			}
+			clientAddr := getClientByID(l, parts[1])
+			if clientAddr == "" {
+				continue
+			}
+			handleForward(l, clientAddr, parts[2], parts[3])
+		case "forwards":
+			listForwards(l)
 		case "exit":
 			return
 		default:
@@ -177,6 +194,8 @@ func printHelp() {
 	fmt.Println("  shell <client_id>           - Open interactive PTY shell with client")
 	fmt.Println("  upload <id> <local> <remote> - Upload local file to remote path on client")
 	fmt.Println("  download <id> <remote> <local> - Download remote file from client")
+	fmt.Println("  forward <id> <local_port> <remote_addr> - Forward local port to remote address through client")
+	fmt.Println("  forwards                    - List active port forwards")
 	fmt.Println("  exit                        - Exit the listener")
 	fmt.Println()
 	fmt.Println("In PTY shell mode:")
@@ -536,4 +555,45 @@ func enterPtyShell(l server.ListenerInterface, clientAddr string) {
 
 	// Wait for both goroutines to fully finish before returning
 	wg.Wait()
+}
+
+func handleForward(l server.ListenerInterface, clientAddr, localPort, remoteAddr string) {
+	// Generate unique forward ID
+	fwdID := fmt.Sprintf("fwd-%d", time.Now().UnixNano())
+	
+	// Get access to the forward manager (via type assertion)
+	if listener, ok := l.(*server.Listener); ok {
+		// Create send function for this client
+		sendFunc := func(msg string) {
+			_ = l.SendCommand(clientAddr, msg)
+		}
+		
+		err := listener.GetForwardManager().StartForward(fwdID, localPort, remoteAddr, sendFunc)
+		if err != nil {
+			fmt.Printf("Failed to start forward: %v\n", err)
+			return
+		}
+		
+		fmt.Printf("✓ Port forward started: 127.0.0.1:%s -> %s (via %s)\n", localPort, remoteAddr, clientAddr)
+		fmt.Printf("  Forward ID: %s\n", fwdID)
+	} else {
+		fmt.Println("Error: could not access forward manager")
+	}
+}
+
+func listForwards(l server.ListenerInterface) {
+	if listener, ok := l.(*server.Listener); ok {
+		forwards := listener.GetForwardManager().ListForwards()
+		if len(forwards) == 0 {
+			fmt.Println("No active port forwards")
+		} else {
+			fmt.Println("\nActive Port Forwards:")
+			for i, fwd := range forwards {
+				fmt.Printf("  %d. %s -> %s (ID: %s)\n", i+1, fwd.LocalAddr, fwd.RemoteAddr, fwd.ID)
+			}
+			fmt.Println()
+		}
+	} else {
+		fmt.Println("Error: could not access forward manager")
+	}
 }

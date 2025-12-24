@@ -33,6 +33,17 @@ const (
 	CmdPtyResize = "PTY_RESIZE" // PTY window resize
 	CmdPtyExit   = "PTY_EXIT"   // Exit PTY mode
 
+	// Port Forwarding Commands
+	CmdForwardStart = "FORWARD_START" // Start port forward: FORWARD_START <fwd_id> <target_host>:<target_port>
+	CmdForwardData  = "FORWARD_DATA"  // Forward data: FORWARD_DATA <fwd_id> <conn_id> <base64_data>
+	CmdForwardStop  = "FORWARD_STOP"  // Stop port forward: FORWARD_STOP <fwd_id>
+
+	// SOCKS5 Proxy Commands
+	CmdSocksStart = "SOCKS_START" // Start SOCKS5 proxy: SOCKS_START <socks_id>
+	CmdSocksConn  = "SOCKS_CONN"  // SOCKS connection: SOCKS_CONN <socks_id> <conn_id> <target_host>:<target_port>
+	CmdSocksData  = "SOCKS_DATA"  // SOCKS data: SOCKS_DATA <socks_id> <conn_id> <base64_data>
+	CmdSocksClose = "SOCKS_CLOSE" // Close SOCKS connection: SOCKS_CLOSE <socks_id> <conn_id>
+
 	// Timeouts
 	ReadTimeout     = 1          // second
 	ResponseTimeout = 5          // seconds

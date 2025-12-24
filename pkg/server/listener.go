@@ -31,6 +31,7 @@ type Listener struct {
 	clientPtyMode     map[string]bool        // Track if client is in PTY mode
 	clientPtyData     map[string]chan []byte // PTY data channels
 	clientIdentifiers map[string]string      // Short client-provided identifiers
+	forwardManager    *ForwardManager        // Port forwarding manager
 	mutex             sync.Mutex
 }
 
@@ -48,6 +49,7 @@ func NewListener(port, networkInterface string, tlsConfig *tls.Config, sharedSec
 		clientPtyMode:     make(map[string]bool),
 		clientPtyData:     make(map[string]chan []byte),
 		clientIdentifiers: make(map[string]string),
+		forwardManager:    NewForwardManager(),
 	}
 }
 
@@ -466,4 +468,9 @@ func (l *Listener) GetPtyDataChan(clientAddr string) (chan []byte, bool) {
 	defer l.mutex.Unlock()
 	ch, exists := l.clientPtyData[clientAddr]
 	return ch, exists
+}
+
+// GetForwardManager returns the forward manager
+func (l *Listener) GetForwardManager() *ForwardManager {
+	return l.forwardManager
 }
