@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,6 +158,7 @@ type mockListener struct {
 	sendErr      error
 	sendErrs     []error // Multiple send errors for different calls
 	getErr       error
+	identifiers  map[string]string
 }
 
 func (m *mockListener) GetClients() []string {
@@ -211,6 +214,37 @@ func (m *mockListener) IsInPtyMode(clientAddr string) bool {
 
 func (m *mockListener) GetPtyDataChan(clientAddr string) (chan []byte, bool) {
 	return nil, false
+}
+
+func (m *mockListener) GetClientIdentifier(clientAddr string) string {
+	if m.identifiers == nil {
+		return ""
+	}
+	return m.identifiers[clientAddr]
+}
+
+func TestListClientsIncludesIdentifiers(t *testing.T) {
+	// Capture stdout
+	orig := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	ml := &mockListener{clients: []string{"1.2.3.4:1111", "5.6.7.8:2222"}, identifiers: map[string]string{"1.2.3.4:1111": "abc12345"}}
+	listClients(ml)
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = orig
+	buf := new(bytes.Buffer)
+	_, _ = io.Copy(buf, r)
+
+	out := buf.String()
+	if !strings.Contains(out, "1.2.3.4:1111 [abc12345]") {
+		t.Fatalf("expected identifier in list output, got: %s", out)
+	}
+	if !strings.Contains(out, "5.6.7.8:2222 [no-id]") {
+		t.Fatalf("expected [no-id] for missing identifier, got: %s", out)
+	}
 }
 
 func TestPrintHelp(t *testing.T) {

@@ -73,6 +73,9 @@ func runClient(target string, maxRetries int, sharedSecret, certFingerprint stri
 		log.Printf("Certificate fingerprint validation: enabled")
 	}
 
+	// Print session identifier for mapping
+	log.Printf("Session ID: %s", client.GetSessionID())
+
 	connectWithRetry(cfg.Target, cfg.MaxRetries, cfg.SharedSecret, cfg.CertFingerprint, func(t, s, f string) client.ReverseClientInterface {
 		return client.NewReverseClient(t, s, f)
 	}, time.Sleep)

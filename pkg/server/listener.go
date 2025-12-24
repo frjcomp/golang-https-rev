@@ -30,6 +30,7 @@ type Listener struct {
 	clientPausePing   map[string]chan bool
 	clientPtyMode     map[string]bool        // Track if client is in PTY mode
 	clientPtyData     map[string]chan []byte // PTY data channels
+	clientIdentifiers map[string]string      // Short client-provided identifiers
 	mutex             sync.Mutex
 }
 
@@ -46,6 +47,7 @@ func NewListener(port, networkInterface string, tlsConfig *tls.Config, sharedSec
 		clientPausePing:   make(map[string]chan bool),
 		clientPtyMode:     make(map[string]bool),
 		clientPtyData:     make(map[string]chan []byte),
+		clientIdentifiers: make(map[string]string),
 	}
 }
 
@@ -140,6 +142,7 @@ func (l *Listener) handleClient(conn net.Conn) {
 		delete(l.clientConnections, clientAddr)
 		delete(l.clientResponses, clientAddr)
 		delete(l.clientPausePing, clientAddr)
+		delete(l.clientIdentifiers, clientAddr)
 		if ptyDataChan, exists := l.clientPtyData[clientAddr]; exists {
 			close(ptyDataChan)
 			delete(l.clientPtyData, clientAddr)
@@ -180,8 +183,19 @@ func (l *Listener) handleClient(conn net.Conn) {
 				return
 			}
 
-			// Check for PTY data
+			// Check for client identifier announcement
 			currentLine := responseBuffer.String()
+			if strings.HasPrefix(currentLine, protocol.CmdIdent+" ") {
+				id := strings.TrimSpace(strings.TrimPrefix(currentLine, protocol.CmdIdent+" "))
+				id = strings.TrimSuffix(id, "\n")
+				l.mutex.Lock()
+				l.clientIdentifiers[clientAddr] = id
+				l.mutex.Unlock()
+				responseBuffer.Reset()
+				continue
+			}
+
+			// Check for PTY data
 			if strings.HasPrefix(currentLine, protocol.CmdPtyData+" ") {
 				encoded := strings.TrimPrefix(currentLine, protocol.CmdPtyData+" ")
 				encoded = strings.TrimSuffix(encoded, "\n")
@@ -274,6 +288,13 @@ func (l *Listener) GetClients() []string {
 		clients = append(clients, addr)
 	}
 	return clients
+}
+
+// GetClientIdentifier returns the short identifier for a client if present.
+func (l *Listener) GetClientIdentifier(clientAddr string) string {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.clientIdentifiers[clientAddr]
 }
 
 // SendCommand sends a command to a specific client identified by its address.

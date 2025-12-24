@@ -20,6 +20,7 @@ const (
 	CmdAuth        = "AUTH"        // Authentication handshake
 	CmdAuthOk      = "AUTH_OK"     // Authentication successful
 	CmdAuthFailed  = "AUTH_FAILED" // Authentication failed
+	CmdIdent       = "IDENT"       // Client session identifier announcement
 	CmdExit        = "exit"
 	CmdStartUpload = "START_UPLOAD"
 	CmdUploadChunk = "UPLOAD_CHUNK"

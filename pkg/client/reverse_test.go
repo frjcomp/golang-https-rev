@@ -90,6 +90,19 @@ func TestExecuteCommandWithPath(t *testing.T) {
 	t.Log("✓ Path commands work correctly")
 }
 
+func TestSessionIDGeneration(t *testing.T) {
+	id := GetSessionID()
+	if len(id) != 8 {
+		t.Fatalf("expected 8-char session ID, got %d (%s)", len(id), id)
+	}
+	// Verify hex characters
+	for _, c := range id {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Fatalf("session ID not hex: %s", id)
+		}
+	}
+}
+
 // startTestListener starts a test listener and returns address
 func startTestListener(t *testing.T, sharedSecret, certFingerprint string) (net.Listener, string) {
 	cert, _, err := certs.GenerateSelfSignedCert()

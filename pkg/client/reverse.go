@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -38,6 +39,32 @@ type ReverseClient struct {
 	inPtyMode         bool       // Whether currently in PTY mode
 	ptyMutex          sync.Mutex // Protects PTY state
 }
+
+var globalSessionID string
+
+// GetSessionID returns the process-wide session identifier used by this gotsr instance.
+func GetSessionID() string {
+	if globalSessionID == "" {
+		globalSessionID = generateShortID()
+	}
+	return globalSessionID
+}
+
+// generateShortID creates an 8-char hex identifier.
+func generateShortID() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp bytes if entropy fails
+		ts := time.Now().UnixNano()
+		b[0] = byte(ts)
+		b[1] = byte(ts >> 8)
+		b[2] = byte(ts >> 16)
+		b[3] = byte(ts >> 24)
+	}
+	return hex.EncodeToString(b)
+}
+
+// end of session ID helpers
 
 // NewReverseClient creates a new reverse shell client
 func NewReverseClient(target, sharedSecret, certFingerprint string) *ReverseClient {
@@ -143,6 +170,13 @@ func (rc *ReverseClient) Connect() error {
 	}
 
 	rc.isConnected = true
+
+	// Announce session identifier to listener and log it locally
+	id := GetSessionID()
+	log.Printf("Session ID: %s", id)
+	if _, err := rc.writer.WriteString(fmt.Sprintf("%s %s\n", protocol.CmdIdent, id)); err == nil {
+		_ = rc.writer.Flush()
+	}
 	return nil
 }
 

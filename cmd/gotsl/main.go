@@ -192,7 +192,12 @@ func listClients(l server.ListenerInterface) {
 	} else {
 		fmt.Println("\nConnected Clients:")
 		for i, addr := range clients {
-			fmt.Printf("  %d. %s\n", i+1, addr)
+			ident := l.GetClientIdentifier(addr)
+			suffix := " [no-id]"
+			if ident != "" {
+				suffix = " [" + ident + "]"
+			}
+			fmt.Printf("  %d. %s%s\n", i+1, addr, suffix)
 		}
 		fmt.Println()
 	}
