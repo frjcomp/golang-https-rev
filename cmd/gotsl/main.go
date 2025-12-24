@@ -39,17 +39,16 @@ func main() {
 
 	flag.BoolVar(&useSharedSecret, "s", false, "Enable shared secret authentication")
 	flag.BoolVar(&useSharedSecret, "shared-secret", false, "Enable shared secret authentication")
-	flag.StringVar(&port, "port", "", "Port to listen on (default: 9001)")
-	flag.StringVar(&networkInterface, "interface", "", "Network interface to bind to (default: 0.0.0.0)")
+	flag.StringVar(&port, "port", "", "Port to listen on (required, no default)")
+	flag.StringVar(&networkInterface, "interface", "", "Network interface to bind to (required, no default)")
 	flag.Parse()
 
-	// For backward compatibility, accept positional args
-	args := flag.Args()
-	if len(args) > 0 {
-		port = args[0]
+	// Validate required flags
+	if port == "" {
+		log.Fatal("Error: --port flag is required")
 	}
-	if len(args) > 1 {
-		networkInterface = args[1]
+	if networkInterface == "" {
+		log.Fatal("Error: --interface flag is required")
 	}
 
 	if err := runListener(port, networkInterface, useSharedSecret); err != nil {

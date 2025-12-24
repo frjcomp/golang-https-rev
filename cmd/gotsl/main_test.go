@@ -95,20 +95,19 @@ func TestDecompressCorruptedGzip(t *testing.T) {
 }
 
 func TestRunListenerArgValidation(t *testing.T) {
-	// Valid call with full args should work (would fail on cert generation, but passes arg validation)
-	// We don't test actual startup since it requires real certificates
-	// Instead test that empty/invalid config is caught
-	
-	// Empty port and network interface should use defaults and validate
-	_, err := config.LoadServerConfig("", "", false)
-	if err != nil {
-		t.Fatalf("LoadServerConfig with defaults failed: %v", err)
-	}
+	// Test with missing required flags - should fail in main() before reaching runListener
+	// Since we validate in main(), we test the config validation instead
 	
 	// Invalid port should be caught
-	_, err = config.LoadServerConfig("not-a-port", "", false)
+	_, err := config.LoadServerConfig("not-a-port", "0.0.0.0", false)
 	if err == nil {
 		t.Fatal("expected error for invalid port")
+	}
+
+	// Valid config should succeed
+	_, err = config.LoadServerConfig("9001", "127.0.0.1", false)
+	if err != nil {
+		t.Fatalf("expected valid config, got error: %v", err)
 	}
 }
 

@@ -31,22 +31,21 @@ func main() {
 	flag.StringVar(&sharedSecret, "s", "", "Shared secret for authentication")
 	flag.StringVar(&sharedSecret, "shared-secret", "", "Shared secret for authentication")
 	flag.StringVar(&certFingerprint, "cert-fingerprint", "", "Expected server certificate SHA256 fingerprint")
-	flag.StringVar(&target, "target", "", "Target server (host:port)")
-	flag.StringVar(&maxRetriesStr, "retries", "", "Maximum number of retries (0 = infinite)")
+	flag.StringVar(&target, "target", "", "Target server address (host:port, required)")
+	flag.StringVar(&maxRetriesStr, "retries", "", "Maximum number of retries (required, 0 = infinite)")
 	flag.Parse()
 
-	args := flag.Args()
-	// For backward compatibility, accept positional args
-	if len(args) > 0 {
-		target = args[0]
+	// Validate required flags
+	if target == "" {
+		log.Fatal("Error: --target flag is required (format: host:port)")
 	}
-	if len(args) > 1 {
-		maxRetriesStr = args[1]
+	if maxRetriesStr == "" {
+		log.Fatal("Error: --retries flag is required (0 = infinite)")
 	}
 
 	maxRetries := 0
-	if maxRetriesStr != "" {
-		fmt.Sscanf(maxRetriesStr, "%d", &maxRetries)
+	if _, err := fmt.Sscanf(maxRetriesStr, "%d", &maxRetries); err != nil {
+		log.Fatalf("Error: --retries must be a number: %v", err)
 	}
 
 	if err := runClient(target, maxRetries, sharedSecret, certFingerprint); err != nil {

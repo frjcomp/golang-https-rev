@@ -61,13 +61,6 @@ func TestRunClientArgValidation(t *testing.T) {
 	}
 }
 
-func TestRunClientValidArgs(t *testing.T) {
-	// Test with valid arguments (but will try to connect)
-	// This covers the argument parsing logic - no longer possible with new signature
-	// Skip this test as it required the old array-based args
-	t.Skip("Test no longer applicable with new config-based args")
-}
-
 func TestPrintHeader(t *testing.T) {
 	// Just call it for coverage
 	printHeader()
