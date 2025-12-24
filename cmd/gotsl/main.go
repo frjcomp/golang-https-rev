@@ -107,13 +107,7 @@ func runListener(port, networkInterface string, useSharedSecret bool) error {
 	return nil
 }
 
-type listenerInterface interface {
-	GetClients() []string
-	SendCommand(client, cmd string) error
-	GetResponse(client string, timeout time.Duration) (string, error)
-}
-
-func interactiveShell(l *server.Listener) {
+func interactiveShell(l server.ListenerInterface) {
 	reader := bufio.NewReader(os.Stdin)
 
 	printHelp()
@@ -191,7 +185,7 @@ func printHelp() {
 	fmt.Println()
 }
 
-func listClients(l listenerInterface) {
+func listClients(l server.ListenerInterface) {
 	clients := l.GetClients()
 	if len(clients) == 0 {
 		fmt.Println("No clients connected")
@@ -204,7 +198,7 @@ func listClients(l listenerInterface) {
 	}
 }
 
-func getClientByID(l listenerInterface, idStr string) string {
+func getClientByID(l server.ListenerInterface, idStr string) string {
 	var numIdx int
 	if _, err := fmt.Sscanf(idStr, "%d", &numIdx); err != nil {
 		fmt.Printf("Invalid client ID: %s\n", idStr)
@@ -220,7 +214,7 @@ func getClientByID(l listenerInterface, idStr string) string {
 	return ""
 }
 
-func handleUploadGlobal(l listenerInterface, currentClient, localPath, remotePath string) bool {
+func handleUploadGlobal(l server.ListenerInterface, currentClient, localPath, remotePath string) bool {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		fmt.Printf("Error reading local file: %v\n", err)
@@ -297,7 +291,7 @@ func handleUploadGlobal(l listenerInterface, currentClient, localPath, remotePat
 	return true
 }
 
-func handleDownloadGlobal(l listenerInterface, currentClient, remotePath, localPath string) bool {
+func handleDownloadGlobal(l server.ListenerInterface, currentClient, remotePath, localPath string) bool {
 	cmd := fmt.Sprintf("%s %s", protocol.CmdDownload, remotePath)
 	if err := l.SendCommand(currentClient, cmd); err != nil {
 		fmt.Printf("Error sending download: %v\n", err)
@@ -333,7 +327,7 @@ func handleDownloadGlobal(l listenerInterface, currentClient, remotePath, localP
 	return true
 }
 
-func enterPtyShell(l *server.Listener, clientAddr string) {
+func enterPtyShell(l server.ListenerInterface, clientAddr string) {
 	fmt.Printf("Entering PTY shell with %s...\n", clientAddr)
 
 	// Send PTY_MODE command

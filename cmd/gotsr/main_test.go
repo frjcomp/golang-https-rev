@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/frjcomp/gots/pkg/client"
 	"github.com/frjcomp/gots/pkg/config"
 )
 
@@ -39,6 +40,8 @@ func (f *fakeClient) HandleCommands() error {
 
 func (f *fakeClient) Close() error { f.closed++; return nil }
 
+func (f *fakeClient) IsConnected() bool { return true }
+
 func noSleep(time.Duration) {}
 
 func TestRunClientArgValidation(t *testing.T) {
@@ -69,7 +72,7 @@ func TestPrintHeader(t *testing.T) {
 func TestConnectWithRetry_MaxRetriesReachedOnConnectFailures(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{errors.New("fail"), errors.New("fail"), errors.New("fail")}}
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		created++
 		return fc
 	}
@@ -95,7 +98,7 @@ func TestConnectWithRetry_MaxRetriesReachedOnConnectFailures(t *testing.T) {
 func TestConnectWithRetry_ReconnectAfterHandleCommandsError(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{nil, errors.New("fail")}, handleErrs: []error{errors.New("session error")}}
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		created++
 		return fc
 	}
@@ -124,7 +127,7 @@ func TestConnectWithRetry_ReconnectAfterHandleCommandsError(t *testing.T) {
 func TestConnectWithRetrySuccessful(t *testing.T) {
 	fc := &fakeClient{} // No errors
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		created++
 		return fc
 	}
@@ -153,7 +156,7 @@ func TestConnectWithRetryInfiniteRetries(t *testing.T) {
 	fc := &fakeClient{connectErrs: []error{errors.New("fail"), errors.New("fail")}}
 	var mu sync.Mutex
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		mu.Lock()
 		created++
 		mu.Unlock()
@@ -190,7 +193,7 @@ func TestConnectWithRetryBackoffMaximum(t *testing.T) {
 	}}
 
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		created++
 		return fc
 	}
@@ -221,7 +224,7 @@ func TestConnectWithRetryHandleCommandsSuccess(t *testing.T) {
 	}
 
 	created := 0
-	factory := func(target, secret, fingerprint string) reverseClient {
+	factory := func(target, secret, fingerprint string) client.ReverseClientInterface {
 		created++
 		return fc
 	}

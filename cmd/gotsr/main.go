@@ -73,19 +73,13 @@ func runClient(target string, maxRetries int, sharedSecret, certFingerprint stri
 		log.Printf("Certificate fingerprint validation: enabled")
 	}
 
-	connectWithRetry(cfg.Target, cfg.MaxRetries, cfg.SharedSecret, cfg.CertFingerprint, func(t, s, f string) reverseClient {
+	connectWithRetry(cfg.Target, cfg.MaxRetries, cfg.SharedSecret, cfg.CertFingerprint, func(t, s, f string) client.ReverseClientInterface {
 		return client.NewReverseClient(t, s, f)
 	}, time.Sleep)
 	return nil
 }
 
-type reverseClient interface {
-	Connect() error
-	HandleCommands() error
-	Close() error
-}
-
-type clientFactory func(target, sharedSecret, certFingerprint string) reverseClient
+type clientFactory func(target, sharedSecret, certFingerprint string) client.ReverseClientInterface
 
 func connectWithRetry(target string, maxRetries int, sharedSecret, certFingerprint string, newClient clientFactory, sleep func(time.Duration)) {
 	retries := 0

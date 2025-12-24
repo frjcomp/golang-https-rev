@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net"
 	"testing"
 	"time"
 
@@ -184,6 +185,30 @@ func (m *mockListener) GetResponse(client string, timeout time.Duration) (string
 		return resp, nil
 	}
 	return "", nil
+}
+
+func (m *mockListener) Start() (net.Listener, error) {
+	return nil, nil
+}
+
+func (m *mockListener) GetClientAddressesSorted() []string {
+	return m.clients
+}
+
+func (m *mockListener) EnterPtyMode(clientAddr string) (chan []byte, error) {
+	return make(chan []byte), nil
+}
+
+func (m *mockListener) ExitPtyMode(clientAddr string) error {
+	return nil
+}
+
+func (m *mockListener) IsInPtyMode(clientAddr string) bool {
+	return false
+}
+
+func (m *mockListener) GetPtyDataChan(clientAddr string) (chan []byte, bool) {
+	return nil, false
 }
 
 func TestPrintHelp(t *testing.T) {
