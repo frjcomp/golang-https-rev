@@ -369,10 +369,43 @@ func enterPtyShell(l server.ListenerInterface, clientAddr string) {
 		// Clear any read deadlines on stdin
 		os.Stdin.SetReadDeadline(time.Time{})
 
-		// Restore terminal state
+		// Restore terminal state BEFORE disabling features
+		// This ensures the terminal is in cooked mode when we send the disable sequences
 		if oldState != nil {
 			term.Restore(fd, oldState)
-			// Flush any raw-mode keystrokes still buffered so they don't leak into the prompt
+		}
+		
+		// Now disable terminal features that may have been enabled by the remote PTY
+		// Send these in cooked mode so the terminal processes them correctly
+		// - Disable mouse tracking (all modes)
+		// - Disable focus events  
+		// - Reset bracketed paste mode
+		os.Stdout.WriteString("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?1004l")
+		os.Stdout.Sync()
+		
+		// Flush stdin only if it's a real terminal (not a pipe/test)
+		// This consumes any pending input like terminal response escape sequences
+		if term.IsTerminal(fd) {
+			// Use a goroutine with timeout to avoid indefinite blocking
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				discardBuf := make([]byte, 4096)
+				os.Stdin.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
+				for {
+					n, err := os.Stdin.Read(discardBuf)
+					if n == 0 || err != nil {
+						break
+					}
+				}
+			}()
+			select {
+			case <-done:
+			case <-time.After(20 * time.Millisecond):
+			}
+			os.Stdin.SetReadDeadline(time.Time{})
+			
+			// Also flush using platform-specific method if available
 			if err := flushStdin(); err != nil {
 				log.Printf("Warning: failed to flush stdin after PTY exit: %v", err)
 			}
