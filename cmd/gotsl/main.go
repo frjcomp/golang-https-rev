@@ -124,6 +124,8 @@ func interactiveShell(l *server.Listener) {
 		switch command {
 		case "ls", "dir":
 			listClients(l)
+		case "help":
+			printHelp()
 		case "shell":
 			if len(parts) < 2 {
 				fmt.Println("Usage: shell <client_id>")

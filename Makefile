@@ -55,10 +55,10 @@ vet:
 clean:
 	rm -rf $(BIN_DIR) coverage.out coverage.html
 
-run-gotsl: build
+l: build
 	$(BIN_GOTSL) $(PORT) $(IFACE)
 
-run-gotsr: build
+r: build
 	$(BIN_GOTSR) $(TARGET) $(RETRIES)
 
 cover:
