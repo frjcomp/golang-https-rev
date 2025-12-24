@@ -26,11 +26,11 @@ func TestPtyComprehensive(t *testing.T) {
 	listenerBin := buildBinary(t, "gotsl", "./cmd/gotsl")
 	reverseBin := buildBinary(t, "gotsr", "./cmd/gotsr")
 
-	listener := startProcess(ctx, t, listenerBin, port, "127.0.0.1")
+	listener := startProcess(ctx, t, listenerBin, "--port", port, "--interface", "127.0.0.1")
 	t.Cleanup(listener.stop)
 	waitForContains(t, listener, "Listener ready. Waiting for connections", 10*time.Second)
 
-	reverse := startProcess(ctx, t, reverseBin, fmt.Sprintf("127.0.0.1:%s", port), "1")
+	reverse := startProcess(ctx, t, reverseBin, "--target", fmt.Sprintf("127.0.0.1:%s", port), "--retries", "1")
 	t.Cleanup(reverse.stop)
 	waitForContains(t, reverse, "Connected to listener successfully", 10*time.Second)
 
